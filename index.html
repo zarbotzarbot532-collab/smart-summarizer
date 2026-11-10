@@ -4,13 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>مُلخِّصي الذكي</title>
-  <meta name="description" content="مُلخِّصي الذكي: تطبيق ويب تقدمي لتلخيص المحتوى بسهولة" />
+  <meta name="description" content="مُلخِّصي الذكي: تطبيق ويب تقدمي لتلخيص المحاضرات والاجتماعات" />
   <meta name="theme-color" content="#4F46E5" />
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <!-- ملاحظة: sw.js يُسجَّل عبر JavaScript في نهاية الملف (هذه هي الطريقة الصحيحة لربطه) -->
+  <!-- sw.js يُسجَّل عبر JavaScript في نهاية الملف -->
 
   <!-- تطبيق الوضع المحفوظ قبل رسم الصفحة لتفادي الوميض -->
   <script>
@@ -59,6 +59,7 @@
   <style>
     html { -webkit-tap-highlight-color: transparent; }
     body { font-family: 'Cairo', sans-serif; }
+    audio { width: 100%; }
   </style>
 </head>
 
@@ -68,7 +69,6 @@
   <header class="sticky top-0 z-30 bg-white/90 dark:bg-slate-800/90 backdrop-blur border-b border-slate-200 dark:border-slate-700">
     <div class="max-w-4xl mx-auto flex items-center justify-between px-3 h-16">
 
-      <!-- زر القائمة الجانبية + الشعار -->
       <div class="flex items-center gap-2">
         <button id="menuBtn" type="button"
           class="w-11 h-11 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
@@ -84,7 +84,6 @@
         </a>
       </div>
 
-      <!-- زر الوضع + الإعدادات -->
       <div class="flex items-center gap-1">
         <button id="themeBtn" type="button"
           class="w-11 h-11 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
@@ -131,16 +130,126 @@
   </aside>
 
   <!-- ========== المحتوى الرئيسي ========== -->
-  <main class="max-w-4xl mx-auto px-4 py-10">
-    <section class="text-center bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 px-6 py-14">
-      <div class="w-20 h-20 mx-auto mb-6 rounded-3xl bg-brand-50 dark:bg-slate-700 flex items-center justify-center">
-        <i class="fa-solid fa-wand-magic-sparkles text-4xl text-brand dark:text-brand-400" aria-hidden="true"></i>
-      </div>
-      <h1 class="text-2xl font-extrabold mb-3">مرحباً بك في مُلخِّصي الذكي</h1>
-      <p class="text-slate-500 dark:text-slate-400 leading-relaxed">
-        التطبيق قيد البناء، وستظهر المزايا قريباً.
+  <main class="max-w-4xl mx-auto px-4 py-8 space-y-6">
+
+    <!-- العنوان الرئيسي -->
+    <section class="text-center px-2 pt-2">
+      <h1 class="text-2xl sm:text-3xl font-extrabold leading-snug mb-3">
+        حوِّل محاضراتك واجتماعاتك إلى <span class="text-brand dark:text-brand-400">معرفة منظمة</span>
+      </h1>
+      <p class="text-slate-500 dark:text-slate-400 leading-relaxed max-w-xl mx-auto">
+        سجّل صوتك مباشرة أو ارفع ملفاً صوتياً، ثم اختر نمط التلخيص المناسب لك.
       </p>
     </section>
+
+    <!-- مُحدد نمط التلخيص -->
+    <section class="rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm p-5">
+      <label for="styleSelect" class="flex items-center gap-2 font-bold mb-3">
+        <i class="fa-solid fa-sliders text-brand dark:text-brand-400" aria-hidden="true"></i>
+        نمط التلخيص
+      </label>
+      <div class="relative">
+        <select id="styleSelect"
+          class="w-full appearance-none rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 pr-4 pl-10 py-3 font-semibold focus:outline-none focus:ring-2 focus:ring-brand">
+          <option value="detailed">مفصل للطلبة</option>
+          <option value="meeting">مختصر للاجتماعات</option>
+          <option value="bullets">نقاط سريعة</option>
+        </select>
+        <i class="fa-solid fa-chevron-down absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" aria-hidden="true"></i>
+      </div>
+    </section>
+
+    <!-- البطاقتان -->
+    <div class="grid gap-4 md:grid-cols-2">
+
+      <!-- ===== البطاقة 1: تسجيل مباشر ===== -->
+      <section class="flex flex-col rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm p-5" aria-labelledby="recTitle">
+        <h2 id="recTitle" class="flex items-center gap-2 font-bold text-lg">
+          <i class="fa-solid fa-microphone text-brand dark:text-brand-400" aria-hidden="true"></i>
+          تسجيل مباشر
+        </h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">سجّل المحاضرة أو الاجتماع من ميكروفون جهازك.</p>
+
+        <div class="flex-1 flex flex-col items-center justify-center gap-4 py-6">
+          <div id="timer" dir="ltr" class="hidden text-3xl font-extrabold tabular-nums text-red-500" aria-hidden="true">00:00</div>
+
+          <div class="relative">
+            <span id="pulseRing" class="hidden absolute inset-0 rounded-full bg-red-500/40 animate-ping" aria-hidden="true"></span>
+            <button id="recordBtn" type="button"
+              class="relative w-24 h-24 rounded-full bg-brand hover:bg-brand-700 text-white shadow-lg flex items-center justify-center transition active:scale-95 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand-400 disabled:opacity-60"
+              aria-label="بدء التسجيل">
+              <i id="recordIcon" class="fa-solid fa-microphone text-3xl" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <p id="recordStatus" class="text-sm text-slate-500 dark:text-slate-400 text-center" role="status" aria-live="polite">
+            اضغط على الميكروفون لبدء التسجيل
+          </p>
+        </div>
+
+        <!-- نتيجة التسجيل (مخفية حتى الإيقاف) -->
+        <div id="recordResult" class="hidden border-t border-slate-200 dark:border-slate-700 pt-4 space-y-3">
+          <audio id="audioPreview" controls preload="metadata"></audio>
+          <button id="summarizeRecordBtn" type="button"
+            class="w-full flex items-center justify-center gap-2 rounded-xl bg-brand hover:bg-brand-700 text-white font-bold py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
+            <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+            لخّص التسجيل الآن
+          </button>
+          <button id="discardRecordBtn" type="button"
+            class="w-full flex items-center justify-center gap-2 rounded-xl text-sm font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 py-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+            <i class="fa-regular fa-trash-can" aria-hidden="true"></i>
+            حذف التسجيل
+          </button>
+        </div>
+      </section>
+
+      <!-- ===== البطاقة 2: رفع ملف صوتي ===== -->
+      <section class="flex flex-col rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm p-5" aria-labelledby="uploadTitle">
+        <h2 id="uploadTitle" class="flex items-center gap-2 font-bold text-lg">
+          <i class="fa-solid fa-file-audio text-brand dark:text-brand-400" aria-hidden="true"></i>
+          رفع ملف صوتي
+        </h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">لديك تسجيل جاهز؟ ارفعه من جهازك.</p>
+
+        <div class="flex-1 flex flex-col gap-4 pt-5">
+          <label id="dropZone" for="fileInput"
+            class="flex-1 flex flex-col items-center justify-center text-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-600 p-6 min-h-[11rem] cursor-pointer transition hover:border-brand hover:bg-brand-50/60 dark:hover:bg-slate-700/50 focus-within:ring-2 focus-within:ring-brand">
+            <input id="fileInput" type="file" class="sr-only"
+              accept=".mp3,.wav,.m4a,.ogg,.webm,audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,audio/ogg,audio/webm,video/webm" />
+            <span class="w-14 h-14 rounded-2xl bg-brand-50 dark:bg-slate-700 flex items-center justify-center">
+              <i class="fa-solid fa-cloud-arrow-up text-2xl text-brand dark:text-brand-400" aria-hidden="true"></i>
+            </span>
+            <span class="font-bold">اسحب الملف وأفلته هنا</span>
+            <span class="text-sm text-slate-500 dark:text-slate-400">أو اضغط لاختيار ملف من جهازك</span>
+            <span class="text-xs text-slate-400 dark:text-slate-500">mp3 ، wav ، m4a ، ogg ، webm — بحد أقصى 10 ميجابايت</span>
+          </label>
+
+          <!-- معلومات الملف المختار -->
+          <div id="fileInfoWrap" class="hidden space-y-3">
+            <div class="flex items-center gap-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3">
+              <span class="w-10 h-10 shrink-0 rounded-lg bg-brand-50 dark:bg-slate-700 flex items-center justify-center">
+                <i class="fa-solid fa-music text-brand dark:text-brand-400" aria-hidden="true"></i>
+              </span>
+              <div class="min-w-0 flex-1">
+                <p id="fileName" dir="auto" class="font-semibold truncate"></p>
+                <p id="fileSize" dir="ltr" class="text-xs text-slate-500 dark:text-slate-400 text-right"></p>
+              </div>
+              <button id="removeFileBtn" type="button"
+                class="w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                aria-label="إزالة الملف">
+                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+              </button>
+            </div>
+
+            <button id="summarizeFileBtn" type="button"
+              class="w-full flex items-center justify-center gap-2 rounded-xl bg-brand hover:bg-brand-700 text-white font-bold py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
+              <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+              لخّص الملف الآن
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
   </main>
 
   <!-- ========== نافذة الإعدادات (مخفية) ========== -->
@@ -164,7 +273,7 @@
     </div>
   </div>
 
-  <!-- ========== التوست (مخفي) ========== -->
+  <!-- ========== التوست ========== -->
   <div id="toast" role="status" aria-live="polite"
     class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] max-w-[90%] px-5 py-3 rounded-xl bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-sm font-semibold shadow-lg opacity-0 pointer-events-none translate-y-4 transition-all duration-300">
   </div>
@@ -175,6 +284,7 @@
 
       var $ = function (id) { return document.getElementById(id); };
 
+      /* ====== عناصر الواجهة العامة ====== */
       var menuBtn = $('menuBtn');
       var closeSidebarBtn = $('closeSidebarBtn');
       var sidebar = $('sidebar');
@@ -185,10 +295,30 @@
       var closeModalBtn = $('closeModalBtn');
       var toast = $('toast');
       var themeMeta = document.querySelector('meta[name="theme-color"]');
-
       var toastTimer = null;
 
-      /* ---------- التنبيه (Toast) ---------- */
+      /* ====== عناصر المرحلة 1 ====== */
+      var styleSelect = $('styleSelect');
+
+      var recordBtn = $('recordBtn');
+      var recordIcon = $('recordIcon');
+      var pulseRing = $('pulseRing');
+      var timerEl = $('timer');
+      var recordStatus = $('recordStatus');
+      var recordResult = $('recordResult');
+      var audioPreview = $('audioPreview');
+      var summarizeRecordBtn = $('summarizeRecordBtn');
+      var discardRecordBtn = $('discardRecordBtn');
+
+      var dropZone = $('dropZone');
+      var fileInput = $('fileInput');
+      var fileInfoWrap = $('fileInfoWrap');
+      var fileNameEl = $('fileName');
+      var fileSizeEl = $('fileSize');
+      var removeFileBtn = $('removeFileBtn');
+      var summarizeFileBtn = $('summarizeFileBtn');
+
+      /* ====== التنبيه (Toast) ====== */
       function showToast(message) {
         toast.textContent = message; // textContent: آمن من XSS
         toast.classList.remove('opacity-0', 'translate-y-4');
@@ -197,10 +327,10 @@
         toastTimer = setTimeout(function () {
           toast.classList.remove('opacity-100', 'translate-y-0');
           toast.classList.add('opacity-0', 'translate-y-4');
-        }, 2500);
+        }, 3000);
       }
 
-      /* ---------- القائمة الجانبية ---------- */
+      /* ====== القائمة الجانبية ====== */
       function isSidebarOpen() { return !sidebar.classList.contains('translate-x-full'); }
 
       function openSidebar() {
@@ -223,7 +353,7 @@
         menuBtn.focus();
       }
 
-      /* ---------- نافذة الإعدادات ---------- */
+      /* ====== نافذة الإعدادات ====== */
       function isModalOpen() { return !settingsModal.classList.contains('hidden'); }
 
       function openModal() {
@@ -240,7 +370,7 @@
         settingsBtn.focus();
       }
 
-      /* ---------- الوضع الليلي / النهاري ---------- */
+      /* ====== الوضع الليلي / النهاري ====== */
       function syncThemeColor() {
         var isDark = document.documentElement.classList.contains('dark');
         if (themeMeta) themeMeta.setAttribute('content', isDark ? '#1E293B' : '#4F46E5');
@@ -253,7 +383,316 @@
         showToast(isDark ? 'تم تفعيل الوضع الليلي' : 'تم تفعيل الوضع النهاري');
       }
 
-      /* ---------- الأحداث ---------- */
+      /* ====== نمط التلخيص ====== */
+      function currentStyleLabel() {
+        var opt = styleSelect.options[styleSelect.selectedIndex];
+        return opt ? opt.text : '';
+      }
+
+      (function restoreStyle() {
+        try {
+          var saved = localStorage.getItem('summaryStyle');
+          if (!saved) return;
+          for (var i = 0; i < styleSelect.options.length; i++) {
+            if (styleSelect.options[i].value === saved) { styleSelect.selectedIndex = i; break; }
+          }
+        } catch (e) {}
+      })();
+
+      styleSelect.addEventListener('change', function () {
+        try { localStorage.setItem('summaryStyle', styleSelect.value); } catch (e) {}
+      });
+
+      /* ====== التسجيل المباشر (MediaRecorder) ====== */
+      var stream = null;
+      var recorder = null;
+      var chunks = [];
+      var recordedBlob = null;
+      var audioUrl = null;
+      var isStarting = false;
+      var isRecording = false;
+      var timerInterval = null;
+      var startTime = 0;
+
+      function pad(n) { return n < 10 ? '0' + n : String(n); }
+
+      function formatTime(totalSeconds) {
+        return pad(Math.floor(totalSeconds / 60)) + ':' + pad(totalSeconds % 60);
+      }
+
+      function updateTimer() {
+        timerEl.textContent = formatTime(Math.floor((Date.now() - startTime) / 1000));
+      }
+
+      function startTimer() {
+        startTime = Date.now();
+        timerEl.textContent = '00:00';
+        timerEl.classList.remove('hidden', 'text-slate-500', 'dark:text-slate-300');
+        timerEl.classList.add('text-red-500');
+        clearInterval(timerInterval);
+        timerInterval = setInterval(updateTimer, 250);
+      }
+
+      function stopTimer() {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        updateTimer();
+        timerEl.classList.remove('text-red-500');
+        timerEl.classList.add('text-slate-500', 'dark:text-slate-300');
+      }
+
+      function setRecordingUI(active) {
+        isRecording = active;
+        if (active) {
+          recordBtn.classList.remove('bg-brand', 'hover:bg-brand-700');
+          recordBtn.classList.add('bg-red-600', 'hover:bg-red-700');
+          recordIcon.classList.remove('fa-microphone');
+          recordIcon.classList.add('fa-stop');
+          pulseRing.classList.remove('hidden');
+          recordBtn.setAttribute('aria-label', 'إيقاف التسجيل');
+          recordStatus.textContent = 'جارٍ التسجيل... اضغط للإيقاف';
+        } else {
+          recordBtn.classList.add('bg-brand', 'hover:bg-brand-700');
+          recordBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+          recordIcon.classList.add('fa-microphone');
+          recordIcon.classList.remove('fa-stop');
+          pulseRing.classList.add('hidden');
+          recordBtn.setAttribute('aria-label', 'بدء التسجيل');
+        }
+      }
+
+      function releaseStream() {
+        if (stream) {
+          stream.getTracks().forEach(function (t) { t.stop(); });
+          stream = null;
+        }
+      }
+
+      function clearRecording() {
+        if (audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          audioUrl = null;
+        }
+        recordedBlob = null;
+        audioPreview.removeAttribute('src');
+        audioPreview.load();
+        recordResult.classList.add('hidden');
+      }
+
+      function pickMimeType() {
+        var candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+        for (var i = 0; i < candidates.length; i++) {
+          if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(candidates[i])) return candidates[i];
+        }
+        return '';
+      }
+
+      function micErrorMessage(err) {
+        var name = err && err.name;
+        if (name === 'NotAllowedError' || name === 'SecurityError') return 'تم رفض إذن الميكروفون. فعّله من إعدادات المتصفح.';
+        if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'لم يتم العثور على ميكروفون في جهازك.';
+        if (name === 'NotReadableError') return 'الميكروفون مستخدم من تطبيق آخر.';
+        return 'تعذّر بدء التسجيل.';
+      }
+
+      function resetRecordUI() {
+        setRecordingUI(false);
+        recordStatus.textContent = 'اضغط على الميكروفون لبدء التسجيل';
+      }
+
+      function onRecorderStop() {
+        var type = (recorder && recorder.mimeType) || 'audio/webm';
+        releaseStream();
+
+        if (!chunks.length) {
+          recordStatus.textContent = 'اضغط على الميكروفون لبدء التسجيل';
+          showToast('التسجيل فارغ، حاول مرة أخرى');
+          return;
+        }
+
+        recordedBlob = new Blob(chunks, { type: type });
+        chunks = [];
+        audioUrl = URL.createObjectURL(recordedBlob);
+        audioPreview.src = audioUrl;
+        recordResult.classList.remove('hidden');
+        recordStatus.textContent = 'تم إيقاف التسجيل. يمكنك المعاينة أو التلخيص';
+      }
+
+      async function startRecording() {
+        if (isStarting || isRecording) return;
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+          showToast('المتصفح لا يدعم التسجيل (يلزم فتح التطبيق عبر HTTPS)');
+          return;
+        }
+
+        isStarting = true;
+        recordBtn.disabled = true;
+
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (err) {
+          showToast(micErrorMessage(err));
+          isStarting = false;
+          recordBtn.disabled = false;
+          return;
+        }
+
+        try {
+          var mime = pickMimeType();
+          recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+        } catch (err) {
+          releaseStream();
+          showToast('تعذّر تهيئة المسجّل الصوتي');
+          isStarting = false;
+          recordBtn.disabled = false;
+          return;
+        }
+
+        chunks = [];
+        clearRecording();
+
+        recorder.addEventListener('dataavailable', function (e) {
+          if (e.data && e.data.size > 0) chunks.push(e.data);
+        });
+        recorder.addEventListener('stop', onRecorderStop);
+        recorder.addEventListener('error', function () {
+          stopTimer();
+          resetRecordUI();
+          releaseStream();
+          showToast('حدث خطأ أثناء التسجيل');
+        });
+
+        recorder.start();
+        setRecordingUI(true);
+        startTimer();
+
+        isStarting = false;
+        recordBtn.disabled = false;
+      }
+
+      function stopRecording() {
+        if (!recorder || recorder.state === 'inactive') return;
+        setRecordingUI(false);
+        stopTimer();
+        recorder.stop();
+      }
+
+      recordBtn.addEventListener('click', function () {
+        if (isRecording) stopRecording();
+        else startRecording();
+      });
+
+      summarizeRecordBtn.addEventListener('click', function () {
+        if (!recordedBlob) { showToast('لا يوجد تسجيل لتلخيصه'); return; }
+        showToast('سيتم تفعيل التلخيص (' + currentStyleLabel() + ') في المرحلة القادمة');
+      });
+
+      discardRecordBtn.addEventListener('click', function () {
+        clearRecording();
+        timerEl.classList.add('hidden');
+        timerEl.textContent = '00:00';
+        resetRecordUI();
+        showToast('تم حذف التسجيل');
+      });
+
+      window.addEventListener('pagehide', function () {
+        if (recorder && recorder.state !== 'inactive') recorder.stop();
+        releaseStream();
+      });
+
+      /* ====== رفع ملف صوتي ====== */
+      var MAX_SIZE = 10 * 1024 * 1024; // 10 ميجابايت
+      var ALLOWED_EXT = ['mp3', 'wav', 'm4a', 'ogg', 'webm'];
+      var selectedFile = null;
+
+      function getExt(name) {
+        var i = name.lastIndexOf('.');
+        return i === -1 ? '' : name.slice(i + 1).toLowerCase();
+      }
+
+      function formatSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+      }
+
+      function clearFile() {
+        selectedFile = null;
+        fileInput.value = '';
+        fileNameEl.textContent = '';
+        fileSizeEl.textContent = '';
+        fileInfoWrap.classList.add('hidden');
+      }
+
+      function handleFile(file) {
+        if (!file) return;
+
+        if (ALLOWED_EXT.indexOf(getExt(file.name)) === -1) {
+          showToast('صيغة غير مدعومة. الصيغ المقبولة: mp3, wav, m4a, ogg, webm');
+          fileInput.value = '';
+          return;
+        }
+        if (file.size > MAX_SIZE) {
+          showToast('حجم الملف كبير. الحد الأقصى 10 ميجابايت');
+          fileInput.value = '';
+          return;
+        }
+        if (file.size === 0) {
+          showToast('الملف فارغ');
+          fileInput.value = '';
+          return;
+        }
+
+        selectedFile = file;
+        fileNameEl.textContent = file.name; // textContent: آمن من XSS
+        fileSizeEl.textContent = formatSize(file.size);
+        fileInfoWrap.classList.remove('hidden');
+      }
+
+      fileInput.addEventListener('change', function () {
+        handleFile(fileInput.files && fileInput.files[0]);
+      });
+
+      removeFileBtn.addEventListener('click', clearFile);
+
+      summarizeFileBtn.addEventListener('click', function () {
+        if (!selectedFile) { showToast('اختر ملفاً أولاً'); return; }
+        showToast('سيتم تفعيل التلخيص (' + currentStyleLabel() + ') في المرحلة القادمة');
+      });
+
+      /* السحب والإفلات */
+      var DRAG_CLASSES = ['border-brand', 'bg-brand-50/60', 'dark:bg-slate-700/50'];
+
+      function setDragState(on) {
+        DRAG_CLASSES.forEach(function (c) { dropZone.classList[on ? 'add' : 'remove'](c); });
+      }
+
+      ['dragenter', 'dragover'].forEach(function (evt) {
+        dropZone.addEventListener(evt, function (e) {
+          e.preventDefault();
+          setDragState(true);
+        });
+      });
+
+      dropZone.addEventListener('dragleave', function (e) {
+        if (!dropZone.contains(e.relatedTarget)) setDragState(false);
+      });
+
+      dropZone.addEventListener('drop', function (e) {
+        e.preventDefault();
+        setDragState(false);
+        var files = e.dataTransfer && e.dataTransfer.files;
+        if (!files || !files.length) return;
+        if (files.length > 1) showToast('سيتم استخدام الملف الأول فقط');
+        handleFile(files[0]);
+      });
+
+      // منع المتصفح من فتح الملف إذا أُفلت خارج المنطقة
+      window.addEventListener('dragover', function (e) { e.preventDefault(); });
+      window.addEventListener('drop', function (e) { e.preventDefault(); });
+
+      /* ====== أحداث الواجهة العامة ====== */
       menuBtn.addEventListener('click', openSidebar);
       closeSidebarBtn.addEventListener('click', closeSidebar);
       overlay.addEventListener('click', closeSidebar);
@@ -263,7 +702,7 @@
       settingsBtn.addEventListener('click', openModal);
       closeModalBtn.addEventListener('click', closeModal);
       settingsModal.addEventListener('click', function (e) {
-        if (e.target === settingsModal) closeModal(); // النقر على الخلفية فقط
+        if (e.target === settingsModal) closeModal();
       });
 
       document.addEventListener('keydown', function (e) {
@@ -274,7 +713,7 @@
 
       syncThemeColor();
 
-      /* ---------- تسجيل Service Worker ---------- */
+      /* ====== تسجيل Service Worker ====== */
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
           navigator.serviceWorker.register('./sw.js').catch(function (err) {
