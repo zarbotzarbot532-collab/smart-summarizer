@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>مُلخِّصي الذكي</title>
+  <meta name="description" content="مُلخِّصي الذكي: تطبيق ويب تقدمي لتلخيص المحتوى بسهولة" />
+  <meta name="theme-color" content="#4F46E5" />
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <!-- ملاحظة: sw.js يُسجَّل عبر JavaScript في نهاية الملف (هذه هي الطريقة الصحيحة لربطه) -->
+
+  <!-- تطبيق الوضع المحفوظ قبل رسم الصفحة لتفادي الوميض -->
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (saved === 'dark' || (!saved && prefersDark)) {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) {}
+    })();
+  </script>
+
+  <!-- خط Cairo -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Cairo', 'sans-serif'] },
+          colors: {
+            brand: {
+              50: '#EEF2FF',
+              100: '#E0E7FF',
+              400: '#818CF8',
+              500: '#6366F1',
+              DEFAULT: '#4F46E5',
+              700: '#4338CA'
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- FontAwesome (CDN) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+  <style>
+    html { -webkit-tap-highlight-color: transparent; }
+    body { font-family: 'Cairo', sans-serif; }
+  </style>
+</head>
+
+<body class="min-h-screen bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- ========== الشريط العلوي ========== -->
+  <header class="sticky top-0 z-30 bg-white/90 dark:bg-slate-800/90 backdrop-blur border-b border-slate-200 dark:border-slate-700">
+    <div class="max-w-4xl mx-auto flex items-center justify-between px-3 h-16">
+
+      <!-- زر القائمة الجانبية + الشعار -->
+      <div class="flex items-center gap-2">
+        <button id="menuBtn" type="button"
+          class="w-11 h-11 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          aria-label="فتح القائمة الجانبية" aria-controls="sidebar" aria-expanded="false">
+          <i class="fa-solid fa-bars text-lg" aria-hidden="true"></i>
+        </button>
+
+        <a href="./" class="flex items-center gap-2 select-none" aria-label="مُلخِّصي الذكي">
+          <span class="w-9 h-9 rounded-xl bg-brand text-white flex items-center justify-center shadow">
+            <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+          </span>
+          <span class="font-extrabold text-lg text-brand dark:text-brand-400">مُلخِّصي الذكي</span>
+        </a>
+      </div>
+
+      <!-- زر الوضع + الإعدادات -->
+      <div class="flex items-center gap-1">
+        <button id="themeBtn" type="button"
+          class="w-11 h-11 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          aria-label="تبديل الوضع الليلي والنهاري">
+          <i class="fa-solid fa-moon text-lg dark:hidden" aria-hidden="true"></i>
+          <i class="fa-solid fa-sun text-lg hidden dark:inline" aria-hidden="true"></i>
+        </button>
+
+        <button id="settingsBtn" type="button"
+          class="w-11 h-11 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          aria-label="فتح الإعدادات" aria-haspopup="dialog">
+          <i class="fa-solid fa-gear text-lg" aria-hidden="true"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ========== الخلفية المعتمة للقائمة الجانبية ========== -->
+  <div id="overlay" class="fixed inset-0 z-40 bg-black/50 opacity-0 pointer-events-none transition-opacity duration-300" aria-hidden="true"></div>
+
+  <!-- ========== القائمة الجانبية ========== -->
+  <aside id="sidebar"
+    class="fixed top-0 right-0 z-50 h-full w-72 max-w-[85%] bg-white dark:bg-slate-800 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col translate-x-full invisible transition-[transform,visibility] duration-300"
+    aria-label="سجل الملخصات" aria-hidden="true">
+
+    <div class="flex items-center justify-between px-4 h-16 border-b border-slate-200 dark:border-slate-700">
+      <h2 class="font-bold text-lg flex items-center gap-2">
+        <i class="fa-solid fa-clock-rotate-left text-brand dark:text-brand-400" aria-hidden="true"></i>
+        سجل الملخصات
+      </h2>
+      <button id="closeSidebarBtn" type="button"
+        class="w-10 h-10 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        aria-label="إغلاق القائمة الجانبية">
+        <i class="fa-solid fa-xmark text-lg" aria-hidden="true"></i>
+      </button>
+    </div>
+
+    <div id="historyList" class="flex-1 overflow-y-auto p-4">
+      <div class="h-full flex flex-col items-center justify-center text-center text-slate-400 dark:text-slate-500 gap-3">
+        <i class="fa-regular fa-folder-open text-4xl" aria-hidden="true"></i>
+        <p class="text-sm">لا توجد ملخصات بعد</p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ========== المحتوى الرئيسي ========== -->
+  <main class="max-w-4xl mx-auto px-4 py-10">
+    <section class="text-center bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 px-6 py-14">
+      <div class="w-20 h-20 mx-auto mb-6 rounded-3xl bg-brand-50 dark:bg-slate-700 flex items-center justify-center">
+        <i class="fa-solid fa-wand-magic-sparkles text-4xl text-brand dark:text-brand-400" aria-hidden="true"></i>
+      </div>
+      <h1 class="text-2xl font-extrabold mb-3">مرحباً بك في مُلخِّصي الذكي</h1>
+      <p class="text-slate-500 dark:text-slate-400 leading-relaxed">
+        التطبيق قيد البناء، وستظهر المزايا قريباً.
+      </p>
+    </section>
+  </main>
+
+  <!-- ========== نافذة الإعدادات (مخفية) ========== -->
+  <div id="settingsModal" class="fixed inset-0 z-[60] hidden items-center justify-center p-4 bg-black/50"
+    role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700">
+      <div class="flex items-center justify-between px-5 h-16 border-b border-slate-200 dark:border-slate-700">
+        <h2 id="settingsTitle" class="font-bold text-lg flex items-center gap-2">
+          <i class="fa-solid fa-gear text-brand dark:text-brand-400" aria-hidden="true"></i>
+          الإعدادات
+        </h2>
+        <button id="closeModalBtn" type="button"
+          class="w-10 h-10 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          aria-label="إغلاق الإعدادات">
+          <i class="fa-solid fa-xmark text-lg" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="p-5 min-h-[8rem] text-center text-sm text-slate-400 dark:text-slate-500 flex items-center justify-center">
+        ستتوفر الإعدادات في المراحل القادمة
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== التوست (مخفي) ========== -->
+  <div id="toast" role="status" aria-live="polite"
+    class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] max-w-[90%] px-5 py-3 rounded-xl bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-sm font-semibold shadow-lg opacity-0 pointer-events-none translate-y-4 transition-all duration-300">
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var $ = function (id) { return document.getElementById(id); };
+
+      var menuBtn = $('menuBtn');
+      var closeSidebarBtn = $('closeSidebarBtn');
+      var sidebar = $('sidebar');
+      var overlay = $('overlay');
+      var themeBtn = $('themeBtn');
+      var settingsBtn = $('settingsBtn');
+      var settingsModal = $('settingsModal');
+      var closeModalBtn = $('closeModalBtn');
+      var toast = $('toast');
+      var themeMeta = document.querySelector('meta[name="theme-color"]');
+
+      var toastTimer = null;
+
+      /* ---------- التنبيه (Toast) ---------- */
+      function showToast(message) {
+        toast.textContent = message; // textContent: آمن من XSS
+        toast.classList.remove('opacity-0', 'translate-y-4');
+        toast.classList.add('opacity-100', 'translate-y-0');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () {
+          toast.classList.remove('opacity-100', 'translate-y-0');
+          toast.classList.add('opacity-0', 'translate-y-4');
+        }, 2500);
+      }
+
+      /* ---------- القائمة الجانبية ---------- */
+      function isSidebarOpen() { return !sidebar.classList.contains('translate-x-full'); }
+
+      function openSidebar() {
+        sidebar.classList.remove('translate-x-full', 'invisible');
+        sidebar.setAttribute('aria-hidden', 'false');
+        overlay.classList.remove('opacity-0', 'pointer-events-none');
+        overlay.classList.add('opacity-100');
+        menuBtn.setAttribute('aria-expanded', 'true');
+        document.body.classList.add('overflow-hidden');
+        closeSidebarBtn.focus();
+      }
+
+      function closeSidebar() {
+        sidebar.classList.add('translate-x-full', 'invisible');
+        sidebar.setAttribute('aria-hidden', 'true');
+        overlay.classList.add('opacity-0', 'pointer-events-none');
+        overlay.classList.remove('opacity-100');
+        menuBtn.setAttribute('aria-expanded', 'false');
+        document.body.classList.remove('overflow-hidden');
+        menuBtn.focus();
+      }
+
+      /* ---------- نافذة الإعدادات ---------- */
+      function isModalOpen() { return !settingsModal.classList.contains('hidden'); }
+
+      function openModal() {
+        settingsModal.classList.remove('hidden');
+        settingsModal.classList.add('flex');
+        document.body.classList.add('overflow-hidden');
+        closeModalBtn.focus();
+      }
+
+      function closeModal() {
+        settingsModal.classList.add('hidden');
+        settingsModal.classList.remove('flex');
+        document.body.classList.remove('overflow-hidden');
+        settingsBtn.focus();
+      }
+
+      /* ---------- الوضع الليلي / النهاري ---------- */
+      function syncThemeColor() {
+        var isDark = document.documentElement.classList.contains('dark');
+        if (themeMeta) themeMeta.setAttribute('content', isDark ? '#1E293B' : '#4F46E5');
+      }
+
+      function toggleTheme() {
+        var isDark = document.documentElement.classList.toggle('dark');
+        try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch (e) {}
+        syncThemeColor();
+        showToast(isDark ? 'تم تفعيل الوضع الليلي' : 'تم تفعيل الوضع النهاري');
+      }
+
+      /* ---------- الأحداث ---------- */
+      menuBtn.addEventListener('click', openSidebar);
+      closeSidebarBtn.addEventListener('click', closeSidebar);
+      overlay.addEventListener('click', closeSidebar);
+
+      themeBtn.addEventListener('click', toggleTheme);
+
+      settingsBtn.addEventListener('click', openModal);
+      closeModalBtn.addEventListener('click', closeModal);
+      settingsModal.addEventListener('click', function (e) {
+        if (e.target === settingsModal) closeModal(); // النقر على الخلفية فقط
+      });
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        if (isModalOpen()) closeModal();
+        else if (isSidebarOpen()) closeSidebar();
+      });
+
+      syncThemeColor();
+
+      /* ---------- تسجيل Service Worker ---------- */
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('./sw.js').catch(function (err) {
+            console.warn('تعذّر تسجيل Service Worker:', err);
+          });
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
