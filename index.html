@@ -1403,3 +1403,285 @@ summarizeFileBtn.addEventListener('click', function () {
   if (!selectedFile) { showToast('اختر ملفاً أولاً'); return; }
   summarize(selectedFile, EXT_MIME[getExt(selectedFile.name)] || baseMime(selectedFile.type));
 });
+      /* ====== أدوات بناء العناصر (textContent فقط) ====== */
+function el(tag, className, text) {
+  var node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined && text !== null) node.textContent = text;
+  return node;
+}
+
+var CARD = 'rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm p-5';
+var CARD_TITLE = 'flex items-center gap-2 font-bold text-lg mb-3';
+var ICON_CLASS = 'text-brand dark:text-brand-400';
+
+function cardTitle(iconClass, text) {
+  var h = el('h3', CARD_TITLE);
+  h.appendChild(el('i', 'fa-solid ' + iconClass + ' ' + ICON_CLASS));
+  h.appendChild(el('span', '', text));
+  return h;
+}
+
+function emptyNote(text) {
+  return el('p', 'text-sm text-slate-400 dark:text-slate-500', text);
+}
+
+/* ====== السجل المحلي (History) ====== */
+var HISTORY_KEY = 'summaries_history';
+var MAX_HISTORY = 100;
+var MAX_CHAT_MESSAGES = 100;
+var DEFAULT_TITLE = 'ملخص بدون عنوان';
+
+var historyItems = [];
+var currentId = null;
+var saveTimer = null;
+var lastSaveFailed = false;
+
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function sanitizeTask(t) {
+  if (!t || typeof t !== 'object') return null;
+  var text = str(t.task);
+  if (!text) return null;
+  return { id: str(t.id) || genId(), task: text, assignee: str(t.assignee), deadline: str(t.deadline), done: t.done === true };
+}
+
+function sanitizeChat(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(function (m) {
+    if (!m || typeof m !== 'object') return null;
+    var role = m.role === 'user' ? 'user' : (m.role === 'ai' ? 'ai' : null);
+    var text = str(m.text);
+    if (!role || !text) return null;
+    return { role: role, text: text, ts: Number(m.ts) || 0 };
+  }).filter(Boolean).slice(-MAX_CHAT_MESSAGES);
+}
+
+function sanitizeItem(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  if (raw.id === undefined || raw.id === null) return null;
+  return {
+    id: raw.id,
+    date: typeof raw.date === 'string' && raw.date ? raw.date : new Date(Number(raw.id) || Date.now()).toISOString(),
+    title: str(raw.title) || DEFAULT_TITLE,
+    executive_summary: str(raw.executive_summary),
+    key_points: Array.isArray(raw.key_points) ? raw.key_points.map(str).filter(Boolean) : [],
+    action_items: (Array.isArray(raw.action_items) ? raw.action_items : []).map(sanitizeTask).filter(Boolean),
+    full_transcript: str(raw.full_transcript),
+    chat: sanitizeChat(raw.chat)
+  };
+}
+
+function loadHistory() {
+  try {
+    var raw = localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    var arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr.map(sanitizeItem).filter(Boolean);
+  } catch (e) { return []; }
+}
+
+function saveHistory() {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(historyItems));
+    lastSaveFailed = false;
+    return true;
+  } catch (e) {
+    if (!lastSaveFailed) showToast('تعذّر حفظ السجل (مساحة التخزين ممتلئة). احذف بعض الملخصات.', ERROR_TOAST_MS);
+    lastSaveFailed = true;
+    return false;
+  }
+}
+
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(function () { saveTimer = null; saveHistory(); renderHistory(); }, 300);
+}
+
+function flushSave() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; saveHistory(); renderHistory(); }
+}
+
+function findIndex(id) {
+  for (var i = 0; i < historyItems.length; i++) { if (String(historyItems[i].id) === String(id)) return i; }
+  return -1;
+}
+
+function findItem(id) {
+  var i = findIndex(id);
+  return i === -1 ? null : historyItems[i];
+}
+
+function getCurrent() { return currentId === null ? null : findItem(currentId); }
+
+function addToHistory(result) {
+  var id = Date.now();
+  while (findIndex(id) !== -1) id++;
+  var item = {
+    id: id, date: new Date().toISOString(), title: result.title, executive_summary: result.executive_summary,
+    key_points: result.key_points.slice(),
+    action_items: result.action_items.map(function (t) { return { id: genId(), task: t.task, assignee: t.assignee, deadline: t.deadline, done: false }; }),
+    full_transcript: result.full_transcript, chat: []
+  };
+  historyItems.unshift(item);
+  if (historyItems.length > MAX_HISTORY) historyItems.length = MAX_HISTORY;
+  saveHistory(); renderHistory(); return item;
+}
+
+function formatDate(iso) {
+  try {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString('ar-DZ', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch (e) { return ''; }
+}
+
+function normSearch(s) {
+  return String(s).toLowerCase().replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه');
+}
+
+function renderHistory() {
+  var q = normSearch(historySearch.value.trim());
+  var list = historyItems.filter(function (h) { return !q || normSearch(h.title).indexOf(q) !== -1; });
+  historyList.replaceChildren();
+
+  if (!historyItems.length || !list.length) {
+    var empty = el('div', 'h-full min-h-[10rem] flex flex-col items-center justify-center text-center text-slate-400 dark:text-slate-500 gap-3');
+    empty.appendChild(el('i', (historyItems.length ? 'fa-solid fa-magnifying-glass' : 'fa-regular fa-folder-open') + ' text-4xl'));
+    empty.appendChild(el('p', 'text-sm', historyItems.length ? 'لا توجد نتائج مطابقة' : 'لا توجد ملخصات بعد'));
+    historyList.appendChild(empty); return;
+  }
+
+  var ul = el('ul', 'space-y-1');
+  list.forEach(function (h) {
+    var active = currentId !== null && String(currentId) === String(h.id);
+    var li = el('li', 'flex items-stretch gap-1 rounded-xl border transition-colors ' + (active ? 'bg-brand-50 border-brand/40 dark:bg-slate-700 dark:border-brand-400/40' : 'border-transparent hover:bg-slate-100 dark:hover:bg-slate-700/60'));
+    var openBtn = el('button', 'flex-1 min-w-0 text-right px-3 py-2.5 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand');
+    openBtn.type = 'button'; openBtn.setAttribute('data-action', 'open'); openBtn.setAttribute('data-id', String(h.id));
+    var title = el('span', 'block font-semibold text-sm truncate', h.title); title.setAttribute('dir', 'auto');
+    openBtn.appendChild(title);
+    openBtn.appendChild(el('span', 'block text-xs text-slate-400 dark:text-slate-500 mt-0.5', formatDate(h.date)));
+    var delBtn = el('button', 'w-9 shrink-0 rounded-xl flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400');
+    delBtn.type = 'button'; delBtn.setAttribute('data-action', 'delete'); delBtn.setAttribute('data-id', String(h.id)); delBtn.setAttribute('aria-label', 'حذف الملخص');
+    delBtn.appendChild(el('i', 'fa-regular fa-trash-can text-sm'));
+    li.appendChild(openBtn); li.appendChild(delBtn); ul.appendChild(li);
+  });
+  historyList.appendChild(ul);
+}
+
+function deleteHistoryItem(id) {
+  var idx = findIndex(id);
+  if (idx === -1) return;
+  if (!window.confirm('هل تريد حذف هذا الملخص نهائياً من السجل؟')) return;
+  flushSave(); historyItems.splice(idx, 1); saveHistory();
+  if (currentId !== null && String(currentId) === String(id)) {
+    cancelChat(); currentId = null; workspaceView.classList.add('hidden'); homeView.classList.remove('hidden');
+  }
+  renderHistory(); showToast('تم حذف الملخص');
+}
+
+historyList.addEventListener('click', function (e) {
+  var btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  var id = btn.getAttribute('data-id');
+  if (btn.getAttribute('data-action') === 'open') { openItem(id); closeSidebar(); }
+  else if (btn.getAttribute('data-action') === 'delete') { deleteHistoryItem(id); }
+});
+historySearch.addEventListener('input', renderHistory);
+
+/* ====== مساحة العمل (Workspace) ====== */
+var TAB_ACTIVE = ['bg-brand', 'text-white', 'shadow'];
+var TAB_IDLE = ['text-slate-600', 'dark:text-slate-300', 'hover:bg-slate-100', 'dark:hover:bg-slate-700'];
+
+function selectTab(name) {
+  tabBtns.forEach(function (btn) {
+    var active = btn.getAttribute('data-tab') === name;
+    TAB_ACTIVE.forEach(function (c) { btn.classList.toggle(c, active); });
+    TAB_IDLE.forEach(function (c) { btn.classList.toggle(c, !active); });
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  panels.forEach(function (p) { p.classList.toggle('hidden', p.getAttribute('data-panel') !== name); });
+  if (name === 'chat') scrollChatToBottom();
+}
+
+tabBtns.forEach(function (btn) { btn.addEventListener('click', function () { selectTab(btn.getAttribute('data-tab')); }); });
+
+function renderSummary(item) {
+  panelSummary.replaceChildren();
+  var c1 = el('div', CARD);
+  c1.appendChild(cardTitle('fa-bolt', 'الملخص التنفيذي'));
+  if (item.executive_summary) {
+    var p = el('p', 'leading-loose whitespace-pre-line', item.executive_summary); p.setAttribute('dir', 'auto'); c1.appendChild(p);
+  } else { c1.appendChild(emptyNote('لا يوجد ملخص')); }
+  panelSummary.appendChild(c1);
+  var c2 = el('div', CARD);
+  c2.appendChild(cardTitle('fa-list-ul', 'النقاط الرئيسية'));
+  if (item.key_points.length) {
+    var ul = el('ul', 'list-disc ps-5 space-y-2 leading-relaxed marker:text-brand');
+    item.key_points.forEach(function (pt) { var li = el('li', '', pt); li.setAttribute('dir', 'auto'); ul.appendChild(li); });
+    c2.appendChild(ul);
+  } else { c2.appendChild(emptyNote('لا توجد نقاط رئيسية')); }
+  panelSummary.appendChild(c2);
+}
+
+function renderTranscript(item) {
+  panelTranscript.replaceChildren();
+  var card = el('div', CARD);
+  card.appendChild(cardTitle('fa-file-lines', 'النص الكامل'));
+  if (item.full_transcript) {
+    var p = el('p', 'leading-loose whitespace-pre-wrap text-slate-700 dark:text-slate-200', item.full_transcript); p.setAttribute('dir', 'auto'); card.appendChild(p);
+  } else { card.appendChild(emptyNote('لا يوجد نص مُفرَّغ')); }
+  panelTranscript.appendChild(card);
+}
+
+function knownValue(v) { var s = str(v); return (s && s !== 'غير محدد') ? s : ''; }
+
+function updateTaskCounter() {
+  var item = getCurrent(); var total = item ? item.action_items.length : 0;
+  if (!total) { taskCounter.classList.add('hidden'); return; }
+  var done = item.action_items.filter(function (t) { return t.done; }).length;
+  taskCounter.textContent = done + ' من ' + total + ' مهام مكتملة';
+  taskCounter.classList.remove('hidden');
+}
+
+function buildTaskRow(t) {
+  var card = el('div', 'flex items-start gap-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm p-4 transition-opacity');
+  var cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = 'task-' + t.id; cb.checked = !!t.done; cb.className = 'mt-1 w-5 h-5 shrink-0 accent-brand cursor-pointer'; cb.setAttribute('aria-label', 'تحديد المهمة كمكتملة');
+  var body = el('label', 'flex-1 min-w-0 cursor-pointer space-y-1.5'); body.setAttribute('for', cb.id);
+  var text = el('p', 'font-bold leading-relaxed break-words', t.task); text.setAttribute('dir', 'auto'); body.appendChild(text);
+  var who = knownValue(t.assignee); var when = knownValue(t.deadline);
+  if (who || when) {
+    var meta = el('div', 'flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-500 dark:text-slate-400');
+    if (who) { var w = el('span', 'flex items-center gap-1.5'); w.appendChild(el('i', 'fa-regular fa-user text-xs')); w.appendChild(el('span', '', who)); meta.appendChild(w); }
+    if (when) { var d = el('span', 'flex items-center gap-1.5'); d.appendChild(el('i', 'fa-regular fa-calendar text-xs')); d.appendChild(el('span', '', when)); meta.appendChild(d); }
+    body.appendChild(meta);
+  }
+  var del = el('button', 'w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400');
+  del.type = 'button'; del.setAttribute('aria-label', 'حذف المهمة'); del.appendChild(el('i', 'fa-regular fa-trash-can text-sm'));
+  function applyDone() { card.classList.toggle('opacity-60', cb.checked); text.classList.toggle('line-through', cb.checked); }
+  applyDone();
+  cb.addEventListener('change', function () { t.done = cb.checked; applyDone(); saveHistory(); updateTaskCounter(); });
+  del.addEventListener('click', function () { deleteTask(t.id); });
+  card.appendChild(cb); card.appendChild(body); card.appendChild(del); return card;
+}
+
+function renderTasks(item) {
+  tasksList.replaceChildren();
+  if (!item.action_items.length) {
+    var empty = el('div', CARD + ' text-center');
+    empty.appendChild(emptyNote('لا توجد مهام. أضف مهمة جديدة من الحقل أدناه.'));
+    tasksList.appendChild(empty);
+  } else {
+    item.action_items.forEach(function (t) { tasksList.appendChild(buildTaskRow(t)); });
+  }
+  updateTaskCounter();
+}
+
+function deleteTask(id) {
+  var item = getCurrent(); if (!item) return;
+  item.action_items = item.action_items.filter(function (t) { return t.id !== id; });
+  saveHistory(); renderTasks(item);
+    }
