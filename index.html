@@ -372,7 +372,7 @@
   <div id="loadingScreen" class="fixed inset-0 z-[80] hidden flex-col items-center justify-center gap-5 p-6 bg-slate-900/85 backdrop-blur-sm text-white text-center"
     role="alertdialog" aria-modal="true" aria-live="assertive" aria-label="جاري التحليل">
     <i class="fa-solid fa-circle-notch fa-spin text-5xl" aria-hidden="true"></i>
-    <p class="font-bold text-lg">جاري تحليل الصوت...</p>
+    <p id="loadingText" class="font-bold text-lg">جاري تحليل الصوت...</p>
     <p class="text-sm opacity-75 max-w-xs">قد يستغرق ذلك دقيقة أو أكثر حسب طول التسجيل</p>
     <button id="cancelLoadingBtn" type="button"
       class="mt-2 rounded-xl border border-white/30 px-5 py-2 text-sm font-semibold hover:bg-white/10 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white">
@@ -382,7 +382,7 @@
 
   <!-- ========== التوست ========== -->
   <div id="toast" role="status" aria-live="polite"
-    class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[90] max-w-[90%] px-5 py-3 rounded-xl bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-sm font-semibold shadow-lg opacity-0 pointer-events-none translate-y-4 transition-all duration-300 text-center">
+    class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[90] max-w-[90%] px-5 py-3 rounded-xl bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-sm font-semibold shadow-lg opacity-0 pointer-events-none translate-y-4 transition-all duration-300 text-center whitespace-pre-line break-words">
   </div>
 
   <script>
@@ -436,6 +436,7 @@
 
       /* ====== عناصر التحميل ومساحة العمل ====== */
       var loadingScreen = $('loadingScreen');
+      var loadingText = $('loadingText');
       var cancelLoadingBtn = $('cancelLoadingBtn');
       var workspaceView = $('workspaceView');
       var backBtn = $('backBtn');
@@ -447,7 +448,7 @@
       var panelTranscript = $('panel-transcript');
 
       /* ====== التنبيه (Toast) ====== */
-      function showToast(message) {
+      function showToast(message, duration) {
         toast.textContent = message; // textContent: آمن من XSS
         toast.classList.remove('opacity-0', 'translate-y-4');
         toast.classList.add('opacity-100', 'translate-y-0');
@@ -455,7 +456,7 @@
         toastTimer = setTimeout(function () {
           toast.classList.remove('opacity-100', 'translate-y-0');
           toast.classList.add('opacity-0', 'translate-y-4');
-        }, 3500);
+        }, duration || 3500);
       }
 
       /* ====== القائمة الجانبية ====== */
@@ -516,7 +517,8 @@
 
       /* ====== مفتاح Gemini ====== */
       var KEY_STORAGE = 'gemini_api_key';
-        var KEY_PATTERN = /^(AIzaSy[A-Za-z0-9_\-]{24,}|AQ\.[A-Za-z0-9_\-.]{22,})$/;
+      // يقبل: AIzaSy... (30 حرفاً فأكثر) و AQ.... (25 حرفاً فأكثر)
+      var KEY_PATTERN = /^(AIzaSy[A-Za-z0-9_\-]{24,}|AQ\.[A-Za-z0-9_\-.]{22,})$/;
       var BADGE_OK = ['bg-green-100', 'text-green-700', 'dark:bg-green-900/40', 'dark:text-green-400'];
       var BADGE_BAD = ['bg-red-100', 'text-red-700', 'dark:bg-red-900/40', 'dark:text-red-400'];
 
@@ -882,7 +884,8 @@
       window.addEventListener('drop', function (e) { e.preventDefault(); });
 
       /* ====== شاشة التحميل ====== */
-      function showLoading() {
+      function showLoading(text) {
+        loadingText.textContent = text;
         loadingScreen.classList.remove('hidden');
         loadingScreen.classList.add('flex');
         document.body.classList.add('overflow-hidden');
@@ -897,9 +900,105 @@
 
       function isLoading() { return !loadingScreen.classList.contains('hidden'); }
 
+      /* ====== تحويل الصوت إلى WAV (16000 هرتز، Mono) ====== */
+      var WAV_RATE = 16000;
+      var MAX_WAV_BYTES = 14 * 1024 * 1024; // نحو 7 دقائق، ليبقى الطلب تحت حد 20MB بعد Base64
+
+      // true = تحويل كل الملفات إلى WAV، false = تحويل webm و m4a والتسجيلات فقط
+      // (mp3/wav/ogg يدعمها Gemini رسمياً، وتحويل الملفات الطويلة منها يتجاوز الحد)
+      var ALWAYS_CONVERT_TO_WAV = false;
+      var CONVERT_MIMES = ['audio/webm', 'video/webm', 'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'video/mp4'];
+
+      function needsConversion(mime) {
+        return ALWAYS_CONVERT_TO_WAV || CONVERT_MIMES.indexOf(mime) !== -1;
+      }
+
+      function decodeAudio(ctx, arrayBuffer) {
+        return new Promise(function (resolve, reject) {
+          ctx.decodeAudioData(arrayBuffer, resolve, reject);
+        });
+      }
+
+      function encodeWav(samples, sampleRate) {
+        var buffer = new ArrayBuffer(44 + samples.length * 2);
+        var view = new DataView(buffer);
+
+        function writeStr(offset, s) {
+          for (var i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i));
+        }
+
+        writeStr(0, 'RIFF');
+        view.setUint32(4, 36 + samples.length * 2, true);
+        writeStr(8, 'WAVE');
+        writeStr(12, 'fmt ');
+        view.setUint32(16, 16, true);            // حجم fmt
+        view.setUint16(20, 1, true);             // PCM
+        view.setUint16(22, 1, true);             // قناة واحدة
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * 2, true); // byte rate
+        view.setUint16(32, 2, true);             // block align
+        view.setUint16(34, 16, true);            // 16 bit
+        writeStr(36, 'data');
+        view.setUint32(40, samples.length * 2, true);
+
+        var offset = 44;
+        for (var i = 0; i < samples.length; i++, offset += 2) {
+          var s = Math.max(-1, Math.min(1, samples[i]));
+          view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+        }
+        return new Blob([buffer], { type: 'audio/wav' });
+      }
+
+      async function convertToWav(blob) {
+        var AudioCtx = window.AudioContext || window.webkitAudioContext;
+        var OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+        if (!AudioCtx || !OfflineCtx) throw fail('المتصفح لا يدعم تحويل الصوت إلى WAV.');
+
+        var arrayBuffer;
+        try {
+          arrayBuffer = await blob.arrayBuffer();
+        } catch (e) {
+          throw fail('تعذّر قراءة الملف الصوتي');
+        }
+
+        var ctx = new AudioCtx();
+        var decoded;
+        try {
+          decoded = await decodeAudio(ctx, arrayBuffer);
+        } catch (e) {
+          throw fail('تعذّر فك ترميز الصوت. قد تكون الصيغة غير مدعومة في متصفحك أو الملف تالف.',
+            (e && e.message) || 'decodeAudioData failed');
+        } finally {
+          if (ctx.close) { try { ctx.close().catch(function () {}); } catch (e2) {} }
+        }
+
+        var frames = Math.ceil(decoded.duration * WAV_RATE);
+        if (frames < 1) throw fail('الصوت فارغ أو قصير جداً');
+        if (44 + frames * 2 > MAX_WAV_BYTES) {
+          throw fail('الصوت طويل جداً بعد التحويل (الحد الأقصى نحو 7 دقائق). جرّب تسجيلاً أقصر.');
+        }
+
+        // إعادة التقطيع إلى 16kHz وتحويله إلى قناة واحدة (Mono)
+        var offline = new OfflineCtx(1, frames, WAV_RATE);
+        var source = offline.createBufferSource();
+        source.buffer = decoded;
+        source.connect(offline.destination);
+        source.start(0);
+
+        var rendered;
+        try {
+          rendered = await offline.startRendering();
+        } catch (e) {
+          throw fail('تعذّر تحويل الصوت إلى WAV.', (e && e.message) || 'startRendering failed');
+        }
+
+        return encodeWav(rendered.getChannelData(0), WAV_RATE);
+      }
+
       /* ====== محرك Gemini ====== */
       var GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
       var REQUEST_TIMEOUT_MS = 180000; // 3 دقائق
+      var ERROR_TOAST_MS = 9000;
 
       var PROMPT_BASE =
         'أنت مساعد ذكي. قم بتحليل هذا الملف الصوتي (محاضرة أو اجتماع) وأعد النتيجة بصيغة JSON حصرية تحتوي على المفاتيح التالية: ' +
@@ -937,10 +1036,11 @@
       var activeController = null;
       var cancelledByUser = false;
 
-      // خطأ مُعدّ للعرض على المستخدم
-      function fail(message) {
+      // خطأ مُعدّ للعرض على المستخدم (رسالة عربية + تفاصيل تقنية اختيارية)
+      function fail(message, detail) {
         var err = new Error(message);
         err.userFacing = true;
+        if (detail) err.detail = String(detail).slice(0, 400);
         return err;
       }
 
@@ -968,19 +1068,18 @@
         if (/location is not supported/i.test(msg)) return 'خدمة Gemini غير متاحة في منطقتك حالياً.';
         if (status === 400) {
           if (/audio|mime|format|unsupported|invalid.*(data|argument)/i.test(msg)) return 'صيغة الصوت غير مدعومة أو الملف تالف.';
-          return 'تعذّر معالجة الطلب. جرّب ملفاً آخر.';
+          return 'تعذّر معالجة الطلب.';
         }
         if (status === 401 || status === 403) return 'المفتاح غير صالح أو لا يملك صلاحية استخدام هذه الخدمة.';
         if (status === 404) return 'نموذج الذكاء الاصطناعي غير متاح حالياً.';
         if (status === 413) return 'حجم الملف كبير جداً على الخدمة.';
         if (status === 429) return 'تجاوزت حد الاستخدام المجاني. حاول بعد قليل.';
         if (status >= 500) return 'خوادم Google مشغولة حالياً. حاول مرة أخرى بعد قليل.';
-        return 'حدث خطأ في الاتصال بالخدمة (' + status + ').';
+        return 'حدث خطأ في الاتصال بالخدمة.';
       }
 
       function parseModelJson(text) {
         var clean = text.trim();
-        // احتياط: إزالة أسوار الكود إن وُجدت
         clean = clean.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
         return JSON.parse(clean);
       }
@@ -1031,6 +1130,7 @@
           }
         };
 
+        // المفتاح يُرسل في الترويسة x-goog-api-key (وليس في الرابط)
         var res = await fetch(GEMINI_URL, {
           method: 'POST',
           headers: {
@@ -1045,13 +1145,17 @@
           var errData = null;
           try { errData = await res.json(); } catch (e) {}
           var apiMsg = errData && errData.error && errData.error.message;
-          throw fail(httpErrorMessage(res.status, apiMsg));
+          console.error('Gemini HTTP error:', res.status, apiMsg || '(بلا رسالة)');
+          throw fail(
+            httpErrorMessage(res.status, apiMsg),
+            'HTTP ' + res.status + (apiMsg ? ': ' + apiMsg : '')
+          );
         }
 
         var data = await res.json();
 
         if (data.promptFeedback && data.promptFeedback.blockReason) {
-          throw fail('تم حجب المحتوى من قبل الخدمة. جرّب ملفاً آخر.');
+          throw fail('تم حجب المحتوى من قبل الخدمة. جرّب ملفاً آخر.', 'blockReason: ' + data.promptFeedback.blockReason);
         }
 
         var candidate = data.candidates && data.candidates[0];
@@ -1063,19 +1167,30 @@
           .map(function (p) { return p.text; })
           .join('');
 
-        if (!text) throw fail('لم يُرجع الذكاء الاصطناعي أي نص. حاول مرة أخرى.');
+        if (!text) {
+          throw fail('لم يُرجع الذكاء الاصطناعي أي نص. حاول مرة أخرى.',
+            candidate.finishReason ? 'finishReason: ' + candidate.finishReason : '');
+        }
 
         var parsed;
         try {
           parsed = parseModelJson(text);
         } catch (e) {
           if (candidate.finishReason === 'MAX_TOKENS') {
-            throw fail('الرد طويل جداً ولم يكتمل. جرّب تسجيلاً أقصر.');
+            throw fail('الرد طويل جداً ولم يكتمل. جرّب تسجيلاً أقصر.', 'finishReason: MAX_TOKENS');
           }
-          throw fail('تعذّر قراءة رد الذكاء الاصطناعي. حاول مرة أخرى.');
+          throw fail('تعذّر قراءة رد الذكاء الاصطناعي. حاول مرة أخرى.', e && e.message);
         }
 
         return normalizeResult(parsed);
+      }
+
+      function throwIfAborted() {
+        if (activeController && activeController.signal.aborted) {
+          var e = new Error('Aborted');
+          e.name = 'AbortError';
+          throw e;
+        }
       }
 
       async function summarize(blob, mime) {
@@ -1094,24 +1209,39 @@
         cancelledByUser = false;
         activeController = new AbortController();
         var timeoutId = null;
-        showLoading();
+        showLoading('جاري تجهيز الصوت...');
 
         try {
-          var base64 = await blobToBase64(blob);
+          var sendBlob = blob;
+          var sendMime = mime;
+
+          // تحويل إلى WAV (16kHz Mono) قبل الإرسال عند الحاجة
+          if (needsConversion(mime)) {
+            sendBlob = await convertToWav(blob);
+            sendMime = 'audio/wav';
+            throwIfAborted();
+          }
+
+          var base64 = await blobToBase64(sendBlob);
+          throwIfAborted();
+
+          loadingText.textContent = 'جاري تحليل الصوت...';
           timeoutId = setTimeout(function () { activeController.abort(); }, REQUEST_TIMEOUT_MS);
-          var result = await callGemini(apiKey, base64, mime, activeController.signal);
+
+          var result = await callGemini(apiKey, base64, sendMime, activeController.signal);
           showWorkspace(result);
           showToast('تم التلخيص بنجاح');
         } catch (err) {
+          console.error('Summarize error:', err);
+
           if (err && err.name === 'AbortError') {
-            showToast(cancelledByUser ? 'تم إلغاء العملية' : 'انتهت مهلة الطلب. جرّب ملفاً أقصر أو تحقق من الشبكة.');
+            showToast(cancelledByUser ? 'تم إلغاء العملية' : 'انتهت مهلة الطلب. جرّب ملفاً أقصر أو تحقق من الشبكة.', ERROR_TOAST_MS);
           } else if (err && err.userFacing) {
-            showToast(err.message);
+            showToast(err.message + (err.detail ? '\n' + err.detail : ''), ERROR_TOAST_MS);
           } else if (err instanceof TypeError) {
-            showToast('تحقق من اتصالك بالإنترنت وحاول مرة أخرى.');
+            showToast('تحقق من اتصالك بالإنترنت وحاول مرة أخرى.\n' + err.message, ERROR_TOAST_MS);
           } else {
-            console.error('Summarize error:', err && err.message);
-            showToast('حدث خطأ غير متوقع. حاول مرة أخرى.');
+            showToast('حدث خطأ غير متوقع:\n' + ((err && err.name) || 'Error') + ': ' + ((err && err.message) || ''), ERROR_TOAST_MS);
           }
         } finally {
           clearTimeout(timeoutId);
