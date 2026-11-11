@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'mulakhkhisi-v12';
+const CACHE_NAME = 'mulakhkhisi-v13';
 
 // الملفات الأساسية التي تُخزَّن عند التثبيت
 const CORE_ASSETS = [
