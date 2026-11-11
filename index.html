@@ -1685,3 +1685,332 @@ function deleteTask(id) {
   item.action_items = item.action_items.filter(function (t) { return t.id !== id; });
   saveHistory(); renderTasks(item);
     }
+            taskForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var item = getCurrent(); if (!item) return;
+        var value = taskInput.value.trim();
+        if (!value) { showToast('اكتب نص المهمة أولاً'); return; }
+        item.action_items.push({ id: genId(), task: value, assignee: '', deadline: '', done: false });
+        saveHistory(); taskInput.value = ''; renderTasks(item); taskInput.focus();
+      });
+
+      /* ====== الشات مع التسجيل ====== */
+      var WELCOME_MESSAGE = 'مرحباً! أنا جاهز للإجابة على أسئلتك حول هذا التسجيل.';
+      var CHAT_TIMEOUT_MS = 60000;
+      var CHAT_CONTEXT_MESSAGES = 6;
+
+      var chatBusy = false;
+      var chatAbort = null;
+
+      var BUBBLE_BASE = 'max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words';
+      var BUBBLE_USER = 'bg-brand text-white rounded-tr-md';
+      var BUBBLE_AI = 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-100 rounded-tl-md';
+
+      function scrollChatToBottom() { chatMessages.scrollTop = chatMessages.scrollHeight; }
+
+      function buildBubble(role, text) {
+        var row = el('div', 'flex ' + (role === 'user' ? 'justify-start' : 'justify-end'));
+        var bubble = el('div', BUBBLE_BASE + ' ' + (role === 'user' ? BUBBLE_USER : BUBBLE_AI), text);
+        bubble.setAttribute('dir', 'auto'); row.appendChild(bubble); return row;
+      }
+
+      function buildTyping() {
+        var row = el('div', 'flex justify-end');
+        var bubble = el('div', 'rounded-2xl rounded-tl-md bg-slate-100 dark:bg-slate-700 px-4 py-3.5 flex items-center gap-1.5');
+        bubble.setAttribute('role', 'status'); bubble.setAttribute('aria-label', 'جاري كتابة الرد');
+        [0, 150, 300].forEach(function (ms) {
+          var dot = el('span', 'w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-300 animate-bounce');
+          dot.style.animationDelay = ms + 'ms'; bubble.appendChild(dot);
+        });
+        row.appendChild(bubble); return row;
+      }
+
+      function buildErrorBubble(err, question) {
+        var row = el('div', 'flex justify-end');
+        var box = el('div', 'max-w-[85%] rounded-2xl rounded-tl-md px-4 py-2.5 text-sm border bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800/60 space-y-1.5');
+        var head = el('p', 'font-semibold flex items-start gap-2 leading-relaxed');
+        head.appendChild(el('i', 'fa-solid fa-circle-exclamation mt-1 shrink-0'));
+        var msg = (err && err.userFacing) ? err.message : 'حدث خطأ غير متوقع.';
+        head.appendChild(el('span', 'break-words', msg)); box.appendChild(head);
+        var detail = (err && err.detail) ? err.detail : (!(err && err.userFacing) && err && err.message ? err.message : '');
+        if (detail) { var d = el('p', 'text-xs opacity-80 break-words', detail); d.setAttribute('dir', 'auto'); box.appendChild(d); }
+        var retry = el('button', 'inline-flex items-center gap-1.5 text-xs font-bold rounded-lg px-2.5 py-1.5 bg-red-100 hover:bg-red-200 dark:bg-red-900/40 dark:hover:bg-red-900/60 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400');
+        retry.type = 'button'; retry.appendChild(el('i', 'fa-solid fa-rotate-right')); retry.appendChild(el('span', '', 'إعادة المحاولة'));
+        retry.addEventListener('click', function () { if (chatBusy) return; row.remove(); sendChat(question, true); });
+        box.appendChild(retry); row.appendChild(box); return row;
+      }
+
+      function renderChat(item) {
+        chatMessages.replaceChildren();
+        chatMessages.appendChild(buildBubble('ai', WELCOME_MESSAGE));
+        item.chat.forEach(function (m) { chatMessages.appendChild(buildBubble(m.role, m.text)); });
+        scrollChatToBottom();
+      }
+
+      function updateChatUI() { chatSendBtn.disabled = chatBusy; }
+
+      function autoResizeChatInput() {
+        chatInput.style.height = 'auto';
+        chatInput.style.height = Math.min(chatInput.scrollHeight, 128) + 'px';
+      }
+
+      function cancelChat() {
+        if (chatAbort) { chatAbort.abort(); chatAbort = null; }
+        chatBusy = false; updateChatUI();
+      }
+
+      function buildChatContext(item) {
+        if (item.full_transcript) return item.full_transcript;
+        var parts = [];
+        if (item.executive_summary) parts.push(item.executive_summary);
+        if (item.key_points.length) parts.push(item.key_points.join('\n'));
+        return parts.join('\n');
+      }
+
+      async function askGemini(item, question, signal) {
+        var apiKey = getKey();
+        if (!apiKey) throw fail('يرجى إدخال مفتاح Gemini أولاً: افتح الإعدادات (زر الترس).');
+        var context = buildChatContext(item);
+        if (!context) throw fail('لا يوجد نص لهذا التسجيل للإجابة عن أسئلتك.');
+        if (navigator.onLine === false) throw fail('لا يوجد اتصال بالإنترنت. تحقق من اتصالك ثم أعد المحاولة.', '', true);
+
+        var prompt = 'بناءً على هذا النص الكامل للمحاضرة/الاجتماع: ' + context + '. أجب عن سؤال المستخدم التالي بدقة واختصار باللغة العربية: ' + question + ' إذا لم تتوفر الإجابة في النص فاذكر ذلك بوضوح. اكتب الإجابة بنص عادي دون رموز Markdown.';
+        var contents = [];
+        var lastRole = null;
+        item.chat.slice(-CHAT_CONTEXT_MESSAGES).forEach(function (m) {
+          var role = m.role === 'user' ? 'user' : 'model';
+          if (contents.length === 0 && role !== 'user') return;
+          if (role === lastRole) return;
+          contents.push({ role: role, parts: [{ text: m.text }] });
+          lastRole = role;
+        });
+        if (lastRole === 'user') contents.pop();
+        contents.push({ role: 'user', parts: [{ text: prompt }] });
+
+        var data = await postGemini(apiKey, { contents: contents, generationConfig: { temperature: 0.3 } }, signal);
+        return readCandidate(data).text.trim();
+      }
+
+      async function sendChat(question, isRetry) {
+        var item = getCurrent();
+        if (!item || chatBusy) return;
+        var itemId = item.id;
+        chatBusy = true; updateChatUI();
+        if (!isRetry) chatMessages.appendChild(buildBubble('user', question));
+        var typingRow = buildTyping();
+        chatMessages.appendChild(typingRow);
+        scrollChatToBottom();
+
+        var ctrl = new AbortController();
+        chatAbort = ctrl;
+        var timedOut = false;
+        var timeoutId = setTimeout(function () { timedOut = true; ctrl.abort(); }, CHAT_TIMEOUT_MS);
+
+        try {
+          var answer = await askGemini(item, question, ctrl.signal);
+          if (ctrl.signal.aborted) return;
+          typingRow.remove();
+          var live = findItem(itemId);
+          if (!live) return;
+          live.chat.push({ role: 'user', text: question, ts: Date.now() }, { role: 'ai', text: answer, ts: Date.now() });
+          if (live.chat.length > MAX_CHAT_MESSAGES) live.chat = live.chat.slice(-MAX_CHAT_MESSAGES);
+          saveHistory();
+          if (currentId !== null && String(currentId) === String(itemId)) {
+            chatMessages.appendChild(buildBubble('ai', answer));
+            scrollChatToBottom();
+          }
+        } catch (err) {
+          typingRow.remove();
+          if (err && err.name === 'AbortError') {
+            if (!timedOut) return;
+            err = fail('انتهت مهلة الرد. الاتصال بطيء.', 'timeout بعد ' + (CHAT_TIMEOUT_MS / 1000) + ' ثانية', true);
+          }
+          chatMessages.appendChild(buildErrorBubble(err, question));
+          scrollChatToBottom();
+        } finally {
+          clearTimeout(timeoutId);
+          if (chatAbort === ctrl) { chatAbort = null; chatBusy = false; updateChatUI(); }
+        }
+      }
+
+      function handleChatSubmit() {
+        var question = chatInput.value.trim();
+        if (!question) return;
+        if (!getCurrent()) return;
+        if (chatBusy) { showToast('انتظر اكتمال الرد الحالي'); return; }
+        chatInput.value = ''; autoResizeChatInput(); sendChat(question, false);
+      }
+
+      chatForm.addEventListener('submit', function (e) { e.preventDefault(); handleChatSubmit(); });
+      chatInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); handleChatSubmit(); }
+      });
+      chatInput.addEventListener('input', autoResizeChatInput);
+
+      chatClearBtn.addEventListener('click', function () {
+        var item = getCurrent(); if (!item) return;
+        if (!item.chat.length) { showToast('لا توجد محادثة لمسحها'); return; }
+        if (!window.confirm('هل تريد مسح هذه المحادثة نهائياً؟')) return;
+        cancelChat(); item.chat = []; saveHistory(); renderChat(item); showToast('تم مسح المحادثة');
+      });
+
+      /* ====== فتح عنصر من السجل / العنوان القابل للتعديل ====== */
+      function openItem(id) {
+        flushSave(); var item = findItem(id); if (!item) return;
+        cancelChat(); currentId = item.id;
+        titleInput.value = item.title;
+        summaryDate.textContent = item.date ? 'تاريخ الإنشاء: ' + formatDate(item.date) : '';
+        renderSummary(item); renderTasks(item); renderTranscript(item);
+        chatInput.value = ''; autoResizeChatInput(); renderChat(item); selectTab('summary');
+        homeView.classList.add('hidden'); workspaceView.classList.remove('hidden'); renderHistory(); window.scrollTo(0, 0);
+      }
+
+      titleInput.addEventListener('input', function () {
+        var item = getCurrent(); if (!item) return;
+        item.title = titleInput.value; scheduleSave();
+      });
+
+      titleInput.addEventListener('blur', function () {
+        var item = getCurrent(); if (!item) return;
+        var v = titleInput.value.trim() || DEFAULT_TITLE;
+        titleInput.value = v; item.title = v;
+        clearTimeout(saveTimer); saveTimer = null; saveHistory(); renderHistory();
+      });
+
+      backBtn.addEventListener('click', function () {
+        flushSave(); cancelChat(); currentId = null;
+        workspaceView.classList.add('hidden'); homeView.classList.remove('hidden'); renderHistory(); window.scrollTo(0, 0);
+      });
+
+      window.addEventListener('pagehide', flushSave);
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') flushSave();
+      });
+
+      /* ====== التصدير: نسخ / Markdown / PDF ====== */
+      function metaLine(t) {
+        var parts = [];
+        var who = knownValue(t.assignee); var when = knownValue(t.deadline);
+        if (who) parts.push('المسؤول: ' + who);
+        if (when) parts.push('الموعد: ' + when);
+        return parts.join('، ');
+      }
+
+      function buildShareText(item) {
+        var L = []; L.push('*' + item.title + '*');
+        if (item.executive_summary) L.push('', '📝 *الملخص*', item.executive_summary);
+        if (item.key_points.length) {
+          L.push('', '📌 *النقاط الرئيسية*');
+          item.key_points.forEach(function (p) { L.push('• ' + p); });
+        }
+        if (item.action_items.length) {
+          L.push('', '✅ *المهام*');
+          item.action_items.forEach(function (t) {
+            var m = metaLine(t);
+            L.push((t.done ? '☑️ ' : '⬜ ') + t.task + (m ? ' (' + m + ')' : ''));
+          });
+        }
+        return L.join('\n');
+      }
+
+      function buildMarkdown(item) {
+        var L = []; L.push('# ' + item.title, '');
+        var date = formatDate(item.date); if (date) L.push('> تاريخ الإنشاء: ' + date, '');
+        L.push('## الملخص التنفيذي', '', item.executive_summary || '_لا يوجد ملخص_', '');
+        L.push('## النقاط الرئيسية', '');
+        if (item.key_points.length) item.key_points.forEach(function (p) { L.push('- ' + p); }); else L.push('_لا توجد نقاط_');
+        L.push('', '## المهام', '');
+        if (item.action_items.length) item.action_items.forEach(function (t) { var m = metaLine(t); L.push('- [' + (t.done ? 'x' : ' ') + '] ' + t.task + (m ? ' — ' + m : '')); }); else L.push('_لا توجد مهام_');
+        L.push('', '## النص الكامل', '', item.full_transcript || '_لا يوجد نص_', '');
+        return L.join('\n');
+      }
+
+      async function copyToClipboard(text) {
+        try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; } } catch (e) {}
+        try {
+          var ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.top = '-1000px'; ta.style.opacity = '0';
+          document.body.appendChild(ta); ta.select(); var ok = document.execCommand('copy'); document.body.removeChild(ta); return ok;
+        } catch (e) { return false; }
+      }
+
+      function safeFileName(title) {
+        var name = String(title || '').replace(/[\\\/:*?"<>|\r\n\t]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 60);
+        return name || 'ملخص';
+      }
+
+      function downloadTextFile(filename, text, mime) {
+        var blob = new Blob([text], { type: mime }); var url = URL.createObjectURL(blob);
+        var a = document.createElement('a'); a.href = url; a.download = filename; a.rel = 'noopener';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      }
+
+      function requireCurrent() { flushSave(); var item = getCurrent(); if (!item) showToast('لا يوجد ملخص مفتوح'); return item; }
+
+      copyBtn.addEventListener('click', async function () {
+        var item = requireCurrent(); if (!item) return;
+        var ok = await copyToClipboard(buildShareText(item));
+        showToast(ok ? 'تم النسخ' : 'تعذّر النسخ. جرّب مرة أخرى.');
+      });
+
+      exportMdBtn.addEventListener('click', function () {
+        var item = requireCurrent(); if (!item) return;
+        downloadTextFile(safeFileName(item.title) + '.md', buildMarkdown(item), 'text/markdown;charset=utf-8');
+        showToast('تم تجهيز ملف Markdown');
+      });
+
+      function buildPrintArea(item) {
+        printArea.replaceChildren();
+        printArea.appendChild(el('h1', '', item.title));
+        var date = formatDate(item.date); if (date) printArea.appendChild(el('p', 'print-date', 'تاريخ الإنشاء: ' + date));
+        printArea.appendChild(el('h2', '', 'الملخص التنفيذي')); printArea.appendChild(el('p', '', item.executive_summary || 'لا يوجد ملخص'));
+        printArea.appendChild(el('h2', '', 'النقاط الرئيسية'));
+        if (item.key_points.length) { var ul = el('ul'); item.key_points.forEach(function (pt) { ul.appendChild(el('li', '', pt)); }); printArea.appendChild(ul); } else { printArea.appendChild(el('p', '', 'لا توجد نقاط')); }
+        printArea.appendChild(el('h2', '', 'المهام'));
+        if (item.action_items.length) {
+          item.action_items.forEach(function (t) {
+            var row = el('div', 'print-task');
+            row.appendChild(el('span', '', (t.done ? '☑ ' : '☐ ') + t.task));
+            var m = metaLine(t); if (m) row.appendChild(el('div', 'print-meta', m));
+            printArea.appendChild(row);
+          });
+        } else { printArea.appendChild(el('p', '', 'لا توجد مهام')); }
+        printArea.appendChild(el('h2', '', 'النص الكامل')); printArea.appendChild(el('p', 'print-transcript', item.full_transcript || 'لا يوجد نص'));
+      }
+
+      exportPdfBtn.addEventListener('click', function () {
+        var item = requireCurrent(); if (!item) return;
+        buildPrintArea(item); document.title = safeFileName(item.title); window.print();
+      });
+
+      window.addEventListener('afterprint', function () { document.title = BASE_TITLE; printArea.replaceChildren(); });
+
+      /* ====== أحداث الواجهة العامة ====== */
+      menuBtn.addEventListener('click', openSidebar);
+      closeSidebarBtn.addEventListener('click', closeSidebar);
+      overlay.addEventListener('click', closeSidebar);
+      themeBtn.addEventListener('click', toggleTheme);
+      settingsBtn.addEventListener('click', openModal);
+      closeModalBtn.addEventListener('click', closeModal);
+      settingsModal.addEventListener('click', function (e) { if (e.target === settingsModal) closeModal(); });
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape' || isLoading()) return;
+        if (isModalOpen()) closeModal();
+        else if (isSidebarOpen()) closeSidebar();
+      });
+
+      /* ====== التهيئة ====== */
+      syncThemeColor(); updateKeyUI(); updateChatUI();
+      historyItems = loadHistory(); renderHistory();
+
+      /* ====== تسجيل Service Worker ====== */
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('./sw.js').catch(function (err) { console.warn('تعذّر تسجيل Service Worker:', err); });
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
