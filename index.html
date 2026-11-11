@@ -368,16 +368,48 @@
     </div>
   </div>
 
-  <!-- ========== شاشة التحميل ========== -->
-  <div id="loadingScreen" class="fixed inset-0 z-[80] hidden flex-col items-center justify-center gap-5 p-6 bg-slate-900/85 backdrop-blur-sm text-white text-center"
-    role="alertdialog" aria-modal="true" aria-live="assertive" aria-label="جاري التحليل">
-    <i class="fa-solid fa-circle-notch fa-spin text-5xl" aria-hidden="true"></i>
-    <p id="loadingText" class="font-bold text-lg">جاري تحليل الصوت...</p>
-    <p class="text-sm opacity-75 max-w-xs">قد يستغرق ذلك دقيقة أو أكثر حسب طول التسجيل</p>
-    <button id="cancelLoadingBtn" type="button"
-      class="mt-2 rounded-xl border border-white/30 px-5 py-2 text-sm font-semibold hover:bg-white/10 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white">
-      إلغاء
-    </button>
+  <!-- ========== شاشة التحميل / الخطأ ========== -->
+  <div id="loadingScreen"
+    class="fixed inset-0 z-[80] hidden flex-col items-center justify-center gap-6 p-6 bg-slate-900/90 backdrop-blur-sm text-white text-center overflow-y-auto"
+    role="alertdialog" aria-modal="true" aria-live="assertive" aria-label="جاري المعالجة">
+
+    <!-- الحالة: قيد المعالجة -->
+    <div id="loadingBusy" class="flex flex-col items-center gap-5 w-full max-w-xs">
+      <i class="fa-solid fa-circle-notch fa-spin text-5xl" aria-hidden="true"></i>
+      <p id="loadingText" class="font-bold text-lg min-h-[3.5rem] flex items-center justify-center">جاري تجهيز الصوت...</p>
+
+      <div class="flex gap-1.5 w-full" aria-hidden="true">
+        <span data-seg class="flex-1 h-1.5 rounded-full transition-colors duration-500 bg-white"></span>
+        <span data-seg class="flex-1 h-1.5 rounded-full transition-colors duration-500 bg-white/25"></span>
+        <span data-seg class="flex-1 h-1.5 rounded-full transition-colors duration-500 bg-white/25"></span>
+        <span data-seg class="flex-1 h-1.5 rounded-full transition-colors duration-500 bg-white/25"></span>
+      </div>
+
+      <p id="loadingElapsed" dir="ltr" class="text-sm tabular-nums opacity-70">00:00</p>
+
+      <p class="text-xs leading-relaxed text-amber-300">
+        ⚠️ يرجى عدم إغلاق الشاشة أو تصغير المتصفح أثناء المعالجة للحفاظ على سرعة الاتصال.
+      </p>
+    </div>
+
+    <!-- الحالة: خطأ نهائي -->
+    <div id="loadingError" class="hidden flex-col items-center gap-3 w-full max-w-xs">
+      <i class="fa-solid fa-triangle-exclamation text-5xl text-amber-400" aria-hidden="true"></i>
+      <p id="errorText" class="font-bold text-lg leading-relaxed"></p>
+      <p id="errorDetail" dir="auto" class="text-xs opacity-70 break-words max-h-24 overflow-y-auto"></p>
+    </div>
+
+    <div class="flex items-center justify-center gap-3 flex-wrap">
+      <button id="retryBtn" type="button"
+        class="hidden items-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold px-5 py-2.5 text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white">
+        <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+        إعادة المحاولة يدوياً
+      </button>
+      <button id="cancelLoadingBtn" type="button"
+        class="rounded-xl border border-white/30 px-5 py-2.5 text-sm font-semibold hover:bg-white/10 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white">
+        إلغاء
+      </button>
+    </div>
   </div>
 
   <!-- ========== التوست ========== -->
@@ -436,8 +468,15 @@
 
       /* ====== عناصر التحميل ومساحة العمل ====== */
       var loadingScreen = $('loadingScreen');
+      var loadingBusy = $('loadingBusy');
+      var loadingError = $('loadingError');
       var loadingText = $('loadingText');
+      var loadingElapsed = $('loadingElapsed');
+      var errorText = $('errorText');
+      var errorDetail = $('errorDetail');
+      var retryBtn = $('retryBtn');
       var cancelLoadingBtn = $('cancelLoadingBtn');
+      var segs = Array.prototype.slice.call(document.querySelectorAll('[data-seg]'));
       var workspaceView = $('workspaceView');
       var backBtn = $('backBtn');
       var titleInput = $('titleInput');
@@ -446,6 +485,10 @@
       var panelSummary = $('panel-summary');
       var panelTasks = $('panel-tasks');
       var panelTranscript = $('panel-transcript');
+
+      /* ====== أدوات صغيرة ====== */
+      function showEl(node, display) { node.classList.remove('hidden'); node.classList.add(display); }
+      function hideEl(node, display) { node.classList.add('hidden'); node.classList.remove(display); }
 
       /* ====== التنبيه (Toast) ====== */
       function showToast(message, duration) {
@@ -604,6 +647,7 @@
       var recorder = null;
       var chunks = [];
       var recordedBlob = null;
+      var recordedSeconds = 0;
       var audioUrl = null;
       var isStarting = false;
       var isRecording = false;
@@ -670,6 +714,7 @@
           audioUrl = null;
         }
         recordedBlob = null;
+        recordedSeconds = 0;
         audioPreview.removeAttribute('src');
         audioPreview.load();
         recordResult.classList.add('hidden');
@@ -769,6 +814,7 @@
 
       function stopRecording() {
         if (!recorder || recorder.state === 'inactive') return;
+        recordedSeconds = (Date.now() - startTime) / 1000;
         setRecordingUI(false);
         stopTimer();
         recorder.stop();
@@ -883,18 +929,112 @@
       window.addEventListener('dragover', function (e) { e.preventDefault(); });
       window.addEventListener('drop', function (e) { e.preventDefault(); });
 
-      /* ====== شاشة التحميل ====== */
-      function showLoading(text) {
-        loadingText.textContent = text;
-        loadingScreen.classList.remove('hidden');
-        loadingScreen.classList.add('flex');
+      /* ====== شاشة التحميل: الخطوات والعدّاد ====== */
+      var STAGES = [
+        'جاري تجهيز الصوت...',
+        'جاري إرسال الملف إلى الذكاء الاصطناعي...',
+        'الذكاء الاصطناعي يستمع ويفهم المحتوى...',
+        'جاري تنظيم الملخص والمهام...'
+      ];
+      var STEP_SWITCH_MS = 4000; // الانتقال التلقائي من "إرسال" إلى "يستمع"
+
+      var loadingMode = 'busy'; // 'busy' | 'error'
+      var currentStage = 0;
+      var stageTimer = null;
+      var elapsedInterval = null;
+      var elapsedStart = 0;
+      var wakeLock = null;
+
+      function setStage(index) {
+        currentStage = index;
+        loadingText.textContent = STAGES[index];
+        segs.forEach(function (seg, i) {
+          seg.classList.toggle('bg-white', i <= index);
+          seg.classList.toggle('bg-white/25', i > index);
+        });
+      }
+
+      function clearStageTimer() {
+        clearTimeout(stageTimer);
+        stageTimer = null;
+      }
+
+      function startElapsed() {
+        stopElapsed();
+        elapsedStart = Date.now();
+        loadingElapsed.textContent = '00:00';
+        elapsedInterval = setInterval(function () {
+          loadingElapsed.textContent = formatTime(Math.floor((Date.now() - elapsedStart) / 1000));
+        }, 1000);
+      }
+
+      function stopElapsed() {
+        clearInterval(elapsedInterval);
+        elapsedInterval = null;
+      }
+
+      // منع انطفاء الشاشة أثناء المعالجة (Screen Wake Lock)
+      async function acquireWakeLock() {
+        try {
+          if ('wakeLock' in navigator && !wakeLock) {
+            var lock = await navigator.wakeLock.request('screen');
+            wakeLock = lock;
+            lock.addEventListener('release', function () {
+              if (wakeLock === lock) wakeLock = null;
+            });
+          }
+        } catch (e) { /* غير مدعوم أو مرفوض: نتجاهله */ }
+      }
+
+      function releaseWakeLock() {
+        try { if (wakeLock) wakeLock.release(); } catch (e) {}
+        wakeLock = null;
+      }
+
+      // يُفقد الـ Wake Lock عند إخفاء الصفحة، فنعيد طلبه عند العودة
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible' && isProcessing && loadingMode === 'busy') {
+          acquireWakeLock();
+        }
+      });
+
+      function showBusyView() {
+        loadingMode = 'busy';
+        showEl(loadingBusy, 'flex');
+        hideEl(loadingError, 'flex');
+        hideEl(retryBtn, 'inline-flex');
+        cancelLoadingBtn.textContent = 'إلغاء';
+      }
+
+      function showErrorView(message, detail) {
+        loadingMode = 'error';
+        clearStageTimer();
+        stopElapsed();
+        releaseWakeLock();
+        errorText.textContent = message;     // textContent: آمن
+        errorDetail.textContent = detail || '';
+        hideEl(loadingBusy, 'flex');
+        showEl(loadingError, 'flex');
+        showEl(retryBtn, 'inline-flex');
+        cancelLoadingBtn.textContent = 'إغلاق';
+        retryBtn.focus();
+      }
+
+      function openLoading() {
+        showBusyView();
+        setStage(0);
+        showEl(loadingScreen, 'flex');
         document.body.classList.add('overflow-hidden');
+        startElapsed();
+        acquireWakeLock();
         cancelLoadingBtn.focus();
       }
 
-      function hideLoading() {
-        loadingScreen.classList.add('hidden');
-        loadingScreen.classList.remove('flex');
+      function closeLoading() {
+        clearStageTimer();
+        stopElapsed();
+        releaseWakeLock();
+        hideEl(loadingScreen, 'flex');
         document.body.classList.remove('overflow-hidden');
       }
 
@@ -903,6 +1043,7 @@
       /* ====== تحويل الصوت إلى WAV (16000 هرتز، Mono) ====== */
       var WAV_RATE = 16000;
       var MAX_WAV_BYTES = 14 * 1024 * 1024; // نحو 7 دقائق، ليبقى الطلب تحت حد 20MB بعد Base64
+      var MAX_WAV_SECONDS = Math.floor((MAX_WAV_BYTES - 44) / (WAV_RATE * 2));
 
       // true = تحويل كل الملفات إلى WAV، false = تحويل webm و m4a والتسجيلات فقط
       // (mp3/wav/ogg يدعمها Gemini رسمياً، وتحويل الملفات الطويلة منها يتجاوز الحد)
@@ -919,40 +1060,69 @@
         });
       }
 
-      function encodeWav(samples, sampleRate) {
-        var buffer = new ArrayBuffer(44 + samples.length * 2);
+      function closeAudioCtx(ctx) {
+        try { if (ctx && ctx.close) ctx.close().catch(function () {}); } catch (e) {}
+      }
+
+      // إعادة التقطيع إلى 16kHz Mono (احتياطي إن لم يدعم المتصفح تحديد تردد السياق)
+      async function resampleToMono16k(decoded) {
+        var OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+        if (!OfflineCtx) throw fail('المتصفح لا يدعم تحويل الصوت إلى WAV.');
+        var frames = Math.ceil(decoded.duration * WAV_RATE);
+        var offline = new OfflineCtx(1, frames, WAV_RATE);
+        var source = offline.createBufferSource();
+        source.buffer = decoded;
+        source.connect(offline.destination);
+        source.start(0);
+        try {
+          return await offline.startRendering();
+        } catch (e) {
+          throw fail('تعذّر تحويل الصوت إلى WAV.', (e && e.message) || 'startRendering failed');
+        }
+      }
+
+      // دمج القنوات إلى Mono وكتابة PCM 16-bit مباشرة داخل ملف WAV (بدون نسخ وسيطة)
+      function audioBufferToWav(ab) {
+        var frames = ab.length;
+        var nCh = ab.numberOfChannels;
+        var channels = [];
+        for (var c = 0; c < nCh; c++) channels.push(ab.getChannelData(c));
+
+        var buffer = new ArrayBuffer(44 + frames * 2);
         var view = new DataView(buffer);
 
         function writeStr(offset, s) {
-          for (var i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i));
+          for (var k = 0; k < s.length; k++) view.setUint8(offset + k, s.charCodeAt(k));
         }
 
         writeStr(0, 'RIFF');
-        view.setUint32(4, 36 + samples.length * 2, true);
+        view.setUint32(4, 36 + frames * 2, true);
         writeStr(8, 'WAVE');
         writeStr(12, 'fmt ');
-        view.setUint32(16, 16, true);            // حجم fmt
-        view.setUint16(20, 1, true);             // PCM
-        view.setUint16(22, 1, true);             // قناة واحدة
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * 2, true); // byte rate
-        view.setUint16(32, 2, true);             // block align
-        view.setUint16(34, 16, true);            // 16 bit
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);              // PCM
+        view.setUint16(22, 1, true);              // Mono
+        view.setUint32(24, WAV_RATE, true);
+        view.setUint32(28, WAV_RATE * 2, true);   // byte rate
+        view.setUint16(32, 2, true);              // block align
+        view.setUint16(34, 16, true);             // 16 bit
         writeStr(36, 'data');
-        view.setUint32(40, samples.length * 2, true);
+        view.setUint32(40, frames * 2, true);
 
-        var offset = 44;
-        for (var i = 0; i < samples.length; i++, offset += 2) {
-          var s = Math.max(-1, Math.min(1, samples[i]));
-          view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+        var pcm = new Int16Array(buffer, 44, frames);
+        for (var i = 0; i < frames; i++) {
+          var sum = 0;
+          for (var j = 0; j < nCh; j++) sum += channels[j][i];
+          var s = sum / nCh;
+          if (s > 1) s = 1; else if (s < -1) s = -1;
+          pcm[i] = s < 0 ? s * 32768 : s * 32767;
         }
         return new Blob([buffer], { type: 'audio/wav' });
       }
 
       async function convertToWav(blob) {
         var AudioCtx = window.AudioContext || window.webkitAudioContext;
-        var OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-        if (!AudioCtx || !OfflineCtx) throw fail('المتصفح لا يدعم تحويل الصوت إلى WAV.');
+        if (!AudioCtx) throw fail('المتصفح لا يدعم تحويل الصوت إلى WAV.');
 
         var arrayBuffer;
         try {
@@ -961,7 +1131,10 @@
           throw fail('تعذّر قراءة الملف الصوتي');
         }
 
-        var ctx = new AudioCtx();
+        // نطلب سياقاً بتردد 16kHz ليُفك الترميز مباشرة بهذا التردد (ذاكرة أقل)
+        var ctx;
+        try { ctx = new AudioCtx({ sampleRate: WAV_RATE }); } catch (e) { ctx = new AudioCtx(); }
+
         var decoded;
         try {
           decoded = await decodeAudio(ctx, arrayBuffer);
@@ -969,36 +1142,31 @@
           throw fail('تعذّر فك ترميز الصوت. قد تكون الصيغة غير مدعومة في متصفحك أو الملف تالف.',
             (e && e.message) || 'decodeAudioData failed');
         } finally {
-          if (ctx.close) { try { ctx.close().catch(function () {}); } catch (e2) {} }
+          arrayBuffer = null;
+          closeAudioCtx(ctx);
         }
 
-        var frames = Math.ceil(decoded.duration * WAV_RATE);
-        if (frames < 1) throw fail('الصوت فارغ أو قصير جداً');
-        if (44 + frames * 2 > MAX_WAV_BYTES) {
+        if (!decoded.length) throw fail('الصوت فارغ');
+
+        var estimatedFrames = Math.ceil(decoded.duration * WAV_RATE);
+        if (44 + estimatedFrames * 2 > MAX_WAV_BYTES) {
           throw fail('الصوت طويل جداً بعد التحويل (الحد الأقصى نحو 7 دقائق). جرّب تسجيلاً أقصر.');
         }
 
-        // إعادة التقطيع إلى 16kHz وتحويله إلى قناة واحدة (Mono)
-        var offline = new OfflineCtx(1, frames, WAV_RATE);
-        var source = offline.createBufferSource();
-        source.buffer = decoded;
-        source.connect(offline.destination);
-        source.start(0);
-
-        var rendered;
-        try {
-          rendered = await offline.startRendering();
-        } catch (e) {
-          throw fail('تعذّر تحويل الصوت إلى WAV.', (e && e.message) || 'startRendering failed');
+        var finalBuf = decoded;
+        if (decoded.sampleRate !== WAV_RATE) {
+          finalBuf = await resampleToMono16k(decoded);
         }
+        decoded = null;
 
-        return encodeWav(rendered.getChannelData(0), WAV_RATE);
+        return audioBufferToWav(finalBuf);
       }
 
       /* ====== محرك Gemini ====== */
       var GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent';
-      var REQUEST_TIMEOUT_MS = 180000; // 3 دقائق
+      var REQUEST_TIMEOUT_MS = 180000; // 3 دقائق لكل محاولة
       var ERROR_TOAST_MS = 9000;
+      var MAX_ATTEMPTS = 2; // محاولة أولى + إعادة تلقائية واحدة
 
       var PROMPT_BASE =
         'أنت مساعد ذكي. قم بتحليل هذا الملف الصوتي (محاضرة أو اجتماع) وأعد النتيجة بصيغة JSON حصرية تحتوي على المفاتيح التالية: ' +
@@ -1033,15 +1201,54 @@
       };
 
       var isProcessing = false;
-      var activeController = null;
-      var cancelledByUser = false;
+      var runAbort = null;   // AbortController للعملية الحالية (يُستخدم للإلغاء)
+      var payload = null;    // { base64, mime } محفوظ لإعادة المحاولة اليدوية دون إعادة التحويل
 
-      // خطأ مُعدّ للعرض على المستخدم (رسالة عربية + تفاصيل تقنية اختيارية)
-      function fail(message, detail) {
+      // خطأ مُعدّ للعرض على المستخدم (رسالة عربية + تفاصيل تقنية + قابلية إعادة المحاولة)
+      function fail(message, detail, retryable) {
         var err = new Error(message);
         err.userFacing = true;
         if (detail) err.detail = String(detail).slice(0, 400);
+        if (retryable) err.retryable = true;
         return err;
+      }
+
+      function abortError() {
+        var e = new Error('Aborted');
+        e.name = 'AbortError';
+        return e;
+      }
+
+      function guard(ctrl) {
+        if (ctrl.signal.aborted) throw abortError();
+      }
+
+      function delay(ms, ctrl) {
+        return new Promise(function (resolve, reject) {
+          var t = setTimeout(function () {
+            ctrl.signal.removeEventListener('abort', onAbort);
+            resolve();
+          }, ms);
+          function onAbort() { clearTimeout(t); reject(abortError()); }
+          ctrl.signal.addEventListener('abort', onAbort, { once: true });
+        });
+      }
+
+      // ينتظر عودة الإنترنت (حتى مدة قصوى) قبل إعادة المحاولة
+      function waitForOnline(ctrl, maxMs) {
+        if (navigator.onLine !== false) return Promise.resolve();
+        return new Promise(function (resolve, reject) {
+          var t = setTimeout(finish, maxMs);
+          function cleanup() {
+            clearTimeout(t);
+            window.removeEventListener('online', finish);
+            ctrl.signal.removeEventListener('abort', onAbort);
+          }
+          function finish() { cleanup(); resolve(); }
+          function onAbort() { cleanup(); reject(abortError()); }
+          window.addEventListener('online', finish);
+          ctrl.signal.addEventListener('abort', onAbort, { once: true });
+        });
       }
 
       function blobToBase64(blob) {
@@ -1074,7 +1281,7 @@
         if (status === 404) return 'نموذج الذكاء الاصطناعي غير متاح حالياً.';
         if (status === 413) return 'حجم الملف كبير جداً على الخدمة.';
         if (status === 429) return 'تجاوزت حد الاستخدام المجاني. حاول بعد قليل.';
-        if (status >= 500) return 'خوادم Google مشغولة حالياً. حاول مرة أخرى بعد قليل.';
+        if (status >= 500) return 'خوادم Google مشغولة حالياً.';
         return 'حدث خطأ في الاتصال بالخدمة.';
       }
 
@@ -1130,16 +1337,22 @@
           }
         };
 
-        // المفتاح يُرسل في الترويسة x-goog-api-key (وليس في الرابط)
-        var res = await fetch(GEMINI_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': apiKey
-          },
-          body: JSON.stringify(body),
-          signal: signal
-        });
+        var res;
+        try {
+          // المفتاح يُرسل في الترويسة x-goog-api-key (وليس في الرابط)
+          res = await fetch(GEMINI_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': apiKey
+            },
+            body: JSON.stringify(body),
+            signal: signal
+          });
+        } catch (e) {
+          if (e && e.name === 'AbortError') throw e;
+          throw fail('تعذّر الاتصال بخوادم Google. تحقق من اتصالك بالإنترنت.', e && e.message, true);
+        }
 
         if (!res.ok) {
           var errData = null;
@@ -1148,11 +1361,18 @@
           console.error('Gemini HTTP error:', res.status, apiMsg || '(بلا رسالة)');
           throw fail(
             httpErrorMessage(res.status, apiMsg),
-            'HTTP ' + res.status + (apiMsg ? ': ' + apiMsg : '')
+            'HTTP ' + res.status + (apiMsg ? ': ' + apiMsg : ''),
+            res.status >= 500 || res.status === 408
           );
         }
 
-        var data = await res.json();
+        var data;
+        try {
+          data = await res.json();
+        } catch (e) {
+          if (e && e.name === 'AbortError') throw e;
+          throw fail('انقطع الاتصال أثناء استلام الرد.', e && e.message, true);
+        }
 
         if (data.promptFeedback && data.promptFeedback.blockReason) {
           throw fail('تم حجب المحتوى من قبل الخدمة. جرّب ملفاً آخر.', 'blockReason: ' + data.promptFeedback.blockReason);
@@ -1185,12 +1405,92 @@
         return normalizeResult(parsed);
       }
 
-      function throwIfAborted() {
-        if (activeController && activeController.signal.aborted) {
-          var e = new Error('Aborted');
-          e.name = 'AbortError';
+      // محاولة واحدة: مهلة خاصة بها، وتبديل تلقائي لخطوة العرض
+      async function attemptGemini(apiKey, data, runCtrl) {
+        var ctrl = new AbortController();
+        var timedOut = false;
+        function onRunAbort() { ctrl.abort(); }
+        runCtrl.signal.addEventListener('abort', onRunAbort);
+        var timeoutId = setTimeout(function () { timedOut = true; ctrl.abort(); }, REQUEST_TIMEOUT_MS);
+
+        setStage(1);
+        clearStageTimer();
+        stageTimer = setTimeout(function () {
+          if (loadingMode === 'busy' && currentStage === 1) setStage(2);
+        }, STEP_SWITCH_MS);
+
+        try {
+          return await callGemini(apiKey, data.base64, data.mime, ctrl.signal);
+        } catch (e) {
+          if (e && e.name === 'AbortError' && timedOut && !runCtrl.signal.aborted) {
+            throw fail('انتهت مهلة الطلب. الاتصال بطيء أو الملف طويل.',
+              'timeout بعد ' + (REQUEST_TIMEOUT_MS / 1000) + ' ثانية', true);
+          }
           throw e;
+        } finally {
+          clearTimeout(timeoutId);
+          clearStageTimer();
+          runCtrl.signal.removeEventListener('abort', onRunAbort);
         }
+      }
+
+      function describeError(err) {
+        console.error('Summarize error:', err);
+        if (err && err.userFacing) return err.message + (err.detail ? '\n' + err.detail : '');
+        return 'حدث خطأ غير متوقع:\n' + ((err && err.name) || 'Error') + ': ' + ((err && err.message) || '');
+      }
+
+      function finishProcessing() {
+        closeLoading();
+        isProcessing = false;
+        payload = null;
+        runAbort = null;
+      }
+
+      // إرسال الطلب مع إعادة محاولة تلقائية واحدة، ثم شاشة خطأ مع زر يدوي
+      async function runRequest(myAbort) {
+        var apiKey = getKey();
+        var data = payload;
+        var lastErr = null;
+
+        for (var attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          try {
+            var result = await attemptGemini(apiKey, data, myAbort);
+            if (myAbort.signal.aborted) return;
+
+            setStage(3);
+            await delay(500, myAbort);
+
+            finishProcessing();
+            showWorkspace(result);
+            showToast('تم التلخيص بنجاح');
+            return;
+          } catch (err) {
+            if (myAbort.signal.aborted) return; // أُلغيت العملية من المستخدم
+            console.error('Attempt ' + attempt + ' failed:', err);
+
+            if (!(err && err.retryable)) {
+              // خطأ غير قابل لإعادة المحاولة (مفتاح خاطئ، صيغة غير مدعومة...)
+              finishProcessing();
+              showToast(describeError(err), ERROR_TOAST_MS);
+              return;
+            }
+
+            lastErr = err;
+            if (attempt < MAX_ATTEMPTS) {
+              loadingText.textContent = 'حدث خطأ في الاتصال، جاري إعادة المحاولة...';
+              try {
+                await waitForOnline(myAbort, 15000);
+                await delay(2000, myAbort);
+              } catch (e2) {
+                return; // أُلغيت العملية أثناء الانتظار
+              }
+            }
+          }
+        }
+
+        // فشل نهائي: نُبقي الشاشة مفتوحة مع زر إعادة المحاولة اليدوية
+        showErrorView(lastErr.message, lastErr.detail);
       }
 
       async function summarize(blob, mime) {
@@ -1206,10 +1506,9 @@
         if (navigator.onLine === false) { showToast('لا يوجد اتصال بالإنترنت. تحقق من اتصالك ثم حاول مجدداً.'); return; }
 
         isProcessing = true;
-        cancelledByUser = false;
-        activeController = new AbortController();
-        var timeoutId = null;
-        showLoading('جاري تجهيز الصوت...');
+        var myAbort = new AbortController();
+        runAbort = myAbort;
+        openLoading();
 
         try {
           var sendBlob = blob;
@@ -1219,46 +1518,56 @@
           if (needsConversion(mime)) {
             sendBlob = await convertToWav(blob);
             sendMime = 'audio/wav';
-            throwIfAborted();
+            guard(myAbort);
           }
 
           var base64 = await blobToBase64(sendBlob);
-          throwIfAborted();
+          sendBlob = null;
+          guard(myAbort);
 
-          loadingText.textContent = 'جاري تحليل الصوت...';
-          timeoutId = setTimeout(function () { activeController.abort(); }, REQUEST_TIMEOUT_MS);
-
-          var result = await callGemini(apiKey, base64, sendMime, activeController.signal);
-          showWorkspace(result);
-          showToast('تم التلخيص بنجاح');
+          payload = { base64: base64, mime: sendMime };
         } catch (err) {
-          console.error('Summarize error:', err);
-
-          if (err && err.name === 'AbortError') {
-            showToast(cancelledByUser ? 'تم إلغاء العملية' : 'انتهت مهلة الطلب. جرّب ملفاً أقصر أو تحقق من الشبكة.', ERROR_TOAST_MS);
-          } else if (err && err.userFacing) {
-            showToast(err.message + (err.detail ? '\n' + err.detail : ''), ERROR_TOAST_MS);
-          } else if (err instanceof TypeError) {
-            showToast('تحقق من اتصالك بالإنترنت وحاول مرة أخرى.\n' + err.message, ERROR_TOAST_MS);
-          } else {
-            showToast('حدث خطأ غير متوقع:\n' + ((err && err.name) || 'Error') + ': ' + ((err && err.message) || ''), ERROR_TOAST_MS);
-          }
-        } finally {
-          clearTimeout(timeoutId);
-          activeController = null;
-          isProcessing = false;
-          hideLoading();
+          if (myAbort.signal.aborted) return; // أُلغيت العملية من المستخدم
+          finishProcessing();
+          showToast(describeError(err), ERROR_TOAST_MS);
+          return;
         }
+
+        await runRequest(myAbort);
       }
 
+      // زر الإلغاء / الإغلاق
       cancelLoadingBtn.addEventListener('click', function () {
-        cancelledByUser = true;
-        if (activeController) activeController.abort();
+        if (loadingMode === 'busy') {
+          if (runAbort) runAbort.abort();
+          finishProcessing();
+          showToast('تم إلغاء العملية');
+        } else {
+          finishProcessing();
+        }
+      });
+
+      // إعادة المحاولة اليدوية (تستخدم نفس البيانات المجهّزة دون إعادة التحويل)
+      retryBtn.addEventListener('click', function () {
+        if (!isProcessing || !payload) return;
+        var myAbort = new AbortController();
+        runAbort = myAbort;
+        showBusyView();
+        setStage(1);
+        startElapsed();
+        acquireWakeLock();
+        cancelLoadingBtn.focus();
+        runRequest(myAbort);
       });
 
       summarizeRecordBtn.addEventListener('click', function () {
         if (!recordedBlob) { showToast('لا يوجد تسجيل لتلخيصه'); return; }
-        summarize(recordedBlob, baseMime(recordedBlob.type));
+        var mime = baseMime(recordedBlob.type);
+        if (needsConversion(mime) && recordedSeconds > MAX_WAV_SECONDS) {
+          showToast('التسجيل طويل جداً للتحويل (الحد الأقصى نحو 7 دقائق). سجّل مقاطع أقصر.');
+          return;
+        }
+        summarize(recordedBlob, mime);
       });
 
       summarizeFileBtn.addEventListener('click', function () {
