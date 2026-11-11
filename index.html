@@ -60,6 +60,56 @@
     html { -webkit-tap-highlight-color: transparent; }
     body { font-family: 'Cairo', sans-serif; }
     audio { width: 100%; }
+
+    /* ===== الطباعة / تصدير PDF: يُطبع محتوى النتيجة فقط، أبيض وأسود، RTL ===== */
+    @media print {
+      @page { margin: 16mm; }
+
+      html, body {
+        background: #fff !important;
+        color: #000 !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+      }
+
+      /* إخفاء كل شيء ما عدا منطقة الطباعة (الهيدر، القائمة، الأزرار، التبويبات...) */
+      body > *:not(#printArea) { display: none !important; }
+
+      #printArea {
+        display: block !important;
+        direction: rtl;
+        text-align: right;
+        font-family: 'Cairo', sans-serif;
+        font-size: 12pt;
+        line-height: 1.9;
+        color: #000 !important;
+        background: #fff !important;
+      }
+
+      #printArea * {
+        color: #000 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+      }
+
+      #printArea h1 { font-size: 21pt; font-weight: 800; margin: 0 0 4pt; line-height: 1.5; }
+      #printArea .print-date { font-size: 9pt; margin: 0 0 14pt; }
+      #printArea h2 {
+        font-size: 14pt;
+        font-weight: 700;
+        margin: 18pt 0 6pt;
+        padding-bottom: 2pt;
+        border-bottom: 1.5px solid #000;
+        break-after: avoid;
+        page-break-after: avoid;
+      }
+      #printArea p { margin: 0 0 6pt; }
+      #printArea ul { margin: 0; padding-inline-start: 18pt; padding-inline-end: 0; }
+      #printArea li { margin: 0 0 4pt; break-inside: avoid; page-break-inside: avoid; }
+      #printArea .print-task { margin: 0 0 5pt; break-inside: avoid; page-break-inside: avoid; }
+      #printArea .print-meta { font-size: 10pt; }
+      #printArea .print-transcript { white-space: pre-wrap; }
+    }
   </style>
 </head>
 
@@ -112,12 +162,12 @@
   <!-- ========== الخلفية المعتمة للقائمة الجانبية ========== -->
   <div id="overlay" class="fixed inset-0 z-40 bg-black/50 opacity-0 pointer-events-none transition-opacity duration-300" aria-hidden="true"></div>
 
-  <!-- ========== القائمة الجانبية ========== -->
+  <!-- ========== القائمة الجانبية (سجل الملخصات) ========== -->
   <aside id="sidebar"
     class="fixed top-0 right-0 z-50 h-full w-72 max-w-[85%] bg-white dark:bg-slate-800 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col translate-x-full invisible transition-[transform,visibility] duration-300"
     aria-label="سجل الملخصات" aria-hidden="true">
 
-    <div class="flex items-center justify-between px-4 h-16 border-b border-slate-200 dark:border-slate-700">
+    <div class="flex items-center justify-between px-4 h-16 shrink-0 border-b border-slate-200 dark:border-slate-700">
       <h2 class="font-bold text-lg flex items-center gap-2">
         <i class="fa-solid fa-clock-rotate-left text-brand dark:text-brand-400" aria-hidden="true"></i>
         سجل الملخصات
@@ -129,12 +179,17 @@
       </button>
     </div>
 
-    <div id="historyList" class="flex-1 overflow-y-auto p-4">
-      <div class="h-full flex flex-col items-center justify-center text-center text-slate-400 dark:text-slate-500 gap-3">
-        <i class="fa-regular fa-folder-open text-4xl" aria-hidden="true"></i>
-        <p class="text-sm">لا توجد ملخصات بعد</p>
+    <!-- شريط البحث -->
+    <div class="p-3 shrink-0 border-b border-slate-200 dark:border-slate-700">
+      <div class="relative">
+        <input id="historySearch" type="search" autocomplete="off" placeholder="ابحث في العناوين..."
+          aria-label="بحث في عناوين السجل"
+          class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-400 pr-10 pl-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+        <i class="fa-solid fa-magnifying-glass absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none" aria-hidden="true"></i>
       </div>
     </div>
+
+    <div id="historyList" class="flex-1 overflow-y-auto p-3"></div>
   </aside>
 
   <!-- ========== المحتوى الرئيسي ========== -->
@@ -268,11 +323,28 @@
         العودة
       </button>
 
-      <!-- العنوان القابل للتعديل -->
+      <!-- العنوان القابل للتعديل + شريط التصدير -->
       <div class="rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm p-5">
         <label for="titleInput" class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">عنوان الملخص</label>
         <input id="titleInput" type="text" maxlength="150" dir="auto"
           class="w-full bg-transparent text-xl font-extrabold border-b-2 border-slate-200 dark:border-slate-700 focus:border-brand focus:outline-none py-1 transition" />
+        <p id="summaryDate" class="mt-2 text-xs text-slate-400 dark:text-slate-500"></p>
+
+        <!-- شريط التصدير -->
+        <div class="grid grid-cols-3 gap-2 mt-4" role="group" aria-label="أدوات التصدير">
+          <button id="copyBtn" type="button"
+            class="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl py-2.5 px-1 text-xs sm:text-sm font-bold bg-brand-50 text-brand hover:bg-brand-100 dark:bg-slate-700 dark:text-brand-400 dark:hover:bg-slate-600 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+            <i class="fa-regular fa-copy" aria-hidden="true"></i><span>نسخ النص</span>
+          </button>
+          <button id="exportMdBtn" type="button"
+            class="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl py-2.5 px-1 text-xs sm:text-sm font-bold bg-brand-50 text-brand hover:bg-brand-100 dark:bg-slate-700 dark:text-brand-400 dark:hover:bg-slate-600 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+            <i class="fa-brands fa-markdown" aria-hidden="true"></i><span>تصدير Markdown</span>
+          </button>
+          <button id="exportPdfBtn" type="button"
+            class="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl py-2.5 px-1 text-xs sm:text-sm font-bold bg-brand-50 text-brand hover:bg-brand-100 dark:bg-slate-700 dark:text-brand-400 dark:hover:bg-slate-600 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+            <i class="fa-solid fa-file-pdf" aria-hidden="true"></i><span>تصدير PDF</span>
+          </button>
+        </div>
       </div>
 
       <!-- الأزرار (Tabs) -->
@@ -295,10 +367,28 @@
         </button>
       </div>
 
-      <!-- محتوى الأقسام (عرض مبدئي للقراءة فقط) -->
+      <!-- محتوى الأقسام -->
       <div id="panel-summary" data-panel="summary" role="tabpanel" class="space-y-4"></div>
-      <div id="panel-tasks" data-panel="tasks" role="tabpanel" class="hidden space-y-3"></div>
+
+      <div id="panel-tasks" data-panel="tasks" role="tabpanel" class="hidden space-y-3">
+        <p id="taskCounter" class="hidden px-1 text-sm font-semibold text-slate-500 dark:text-slate-400"></p>
+        <div id="tasksList" class="space-y-3"></div>
+
+        <form id="taskForm" autocomplete="off"
+          class="flex gap-2 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm p-2">
+          <label for="taskInput" class="sr-only">مهمة جديدة</label>
+          <input id="taskInput" type="text" maxlength="200" dir="auto" placeholder="أضف مهمة جديدة..."
+            class="flex-1 min-w-0 bg-transparent px-3 py-2 placeholder-slate-400 focus:outline-none" />
+          <button type="submit"
+            class="shrink-0 flex items-center gap-2 rounded-xl bg-brand hover:bg-brand-700 text-white font-bold px-4 py-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
+            <i class="fa-solid fa-plus text-sm" aria-hidden="true"></i>
+            إضافة
+          </button>
+        </form>
+      </div>
+
       <div id="panel-transcript" data-panel="transcript" role="tabpanel" class="hidden space-y-4"></div>
+
       <div id="panel-chat" data-panel="chat" role="tabpanel" class="hidden">
         <div class="rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm p-8 text-center text-slate-400 dark:text-slate-500">
           <i class="fa-regular fa-comments text-4xl mb-3" aria-hidden="true"></i>
@@ -417,6 +507,9 @@
     class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[90] max-w-[90%] px-5 py-3 rounded-xl bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-sm font-semibold shadow-lg opacity-0 pointer-events-none translate-y-4 transition-all duration-300 text-center whitespace-pre-line break-words">
   </div>
 
+  <!-- ========== منطقة الطباعة (مخفية على الشاشة، تظهر عند تصدير PDF) ========== -->
+  <div id="printArea" class="hidden" dir="rtl" aria-hidden="true"></div>
+
   <script>
     (function () {
       'use strict';
@@ -435,6 +528,7 @@
       var toast = $('toast');
       var themeMeta = document.querySelector('meta[name="theme-color"]');
       var toastTimer = null;
+      var BASE_TITLE = document.title;
 
       /* ====== عناصر الإعدادات ====== */
       var keyBadge = $('keyBadge');
@@ -466,7 +560,7 @@
       var removeFileBtn = $('removeFileBtn');
       var summarizeFileBtn = $('summarizeFileBtn');
 
-      /* ====== عناصر التحميل ومساحة العمل ====== */
+      /* ====== عناصر التحميل ====== */
       var loadingScreen = $('loadingScreen');
       var loadingBusy = $('loadingBusy');
       var loadingError = $('loadingError');
@@ -477,14 +571,26 @@
       var retryBtn = $('retryBtn');
       var cancelLoadingBtn = $('cancelLoadingBtn');
       var segs = Array.prototype.slice.call(document.querySelectorAll('[data-seg]'));
+
+      /* ====== عناصر مساحة العمل والسجل ====== */
       var workspaceView = $('workspaceView');
       var backBtn = $('backBtn');
       var titleInput = $('titleInput');
+      var summaryDate = $('summaryDate');
+      var copyBtn = $('copyBtn');
+      var exportMdBtn = $('exportMdBtn');
+      var exportPdfBtn = $('exportPdfBtn');
       var tabBtns = Array.prototype.slice.call(document.querySelectorAll('[data-tab]'));
       var panels = Array.prototype.slice.call(document.querySelectorAll('[data-panel]'));
       var panelSummary = $('panel-summary');
-      var panelTasks = $('panel-tasks');
       var panelTranscript = $('panel-transcript');
+      var tasksList = $('tasksList');
+      var taskCounter = $('taskCounter');
+      var taskForm = $('taskForm');
+      var taskInput = $('taskInput');
+      var historyList = $('historyList');
+      var historySearch = $('historySearch');
+      var printArea = $('printArea');
 
       /* ====== أدوات صغيرة ====== */
       function showEl(node, display) { node.classList.remove('hidden'); node.classList.add(display); }
@@ -936,7 +1042,7 @@
         'الذكاء الاصطناعي يستمع ويفهم المحتوى...',
         'جاري تنظيم الملخص والمهام...'
       ];
-      var STEP_SWITCH_MS = 4000; // الانتقال التلقائي من "إرسال" إلى "يستمع"
+      var STEP_SWITCH_MS = 4000;
 
       var loadingMode = 'busy'; // 'busy' | 'error'
       var currentStage = 0;
@@ -991,7 +1097,6 @@
         wakeLock = null;
       }
 
-      // يُفقد الـ Wake Lock عند إخفاء الصفحة، فنعيد طلبه عند العودة
       document.addEventListener('visibilitychange', function () {
         if (document.visibilityState === 'visible' && isProcessing && loadingMode === 'busy') {
           acquireWakeLock();
@@ -1011,7 +1116,7 @@
         clearStageTimer();
         stopElapsed();
         releaseWakeLock();
-        errorText.textContent = message;     // textContent: آمن
+        errorText.textContent = message;
         errorDetail.textContent = detail || '';
         hideEl(loadingBusy, 'flex');
         showEl(loadingError, 'flex');
@@ -1042,11 +1147,10 @@
 
       /* ====== تحويل الصوت إلى WAV (16000 هرتز، Mono) ====== */
       var WAV_RATE = 16000;
-      var MAX_WAV_BYTES = 14 * 1024 * 1024; // نحو 7 دقائق، ليبقى الطلب تحت حد 20MB بعد Base64
+      var MAX_WAV_BYTES = 14 * 1024 * 1024; // نحو 7 دقائق
       var MAX_WAV_SECONDS = Math.floor((MAX_WAV_BYTES - 44) / (WAV_RATE * 2));
 
       // true = تحويل كل الملفات إلى WAV، false = تحويل webm و m4a والتسجيلات فقط
-      // (mp3/wav/ogg يدعمها Gemini رسمياً، وتحويل الملفات الطويلة منها يتجاوز الحد)
       var ALWAYS_CONVERT_TO_WAV = false;
       var CONVERT_MIMES = ['audio/webm', 'video/webm', 'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'video/mp4'];
 
@@ -1064,7 +1168,6 @@
         try { if (ctx && ctx.close) ctx.close().catch(function () {}); } catch (e) {}
       }
 
-      // إعادة التقطيع إلى 16kHz Mono (احتياطي إن لم يدعم المتصفح تحديد تردد السياق)
       async function resampleToMono16k(decoded) {
         var OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
         if (!OfflineCtx) throw fail('المتصفح لا يدعم تحويل الصوت إلى WAV.');
@@ -1081,7 +1184,6 @@
         }
       }
 
-      // دمج القنوات إلى Mono وكتابة PCM 16-bit مباشرة داخل ملف WAV (بدون نسخ وسيطة)
       function audioBufferToWav(ab) {
         var frames = ab.length;
         var nCh = ab.numberOfChannels;
@@ -1100,12 +1202,12 @@
         writeStr(8, 'WAVE');
         writeStr(12, 'fmt ');
         view.setUint32(16, 16, true);
-        view.setUint16(20, 1, true);              // PCM
-        view.setUint16(22, 1, true);              // Mono
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
         view.setUint32(24, WAV_RATE, true);
-        view.setUint32(28, WAV_RATE * 2, true);   // byte rate
-        view.setUint16(32, 2, true);              // block align
-        view.setUint16(34, 16, true);             // 16 bit
+        view.setUint32(28, WAV_RATE * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
         writeStr(36, 'data');
         view.setUint32(40, frames * 2, true);
 
@@ -1131,7 +1233,6 @@
           throw fail('تعذّر قراءة الملف الصوتي');
         }
 
-        // نطلب سياقاً بتردد 16kHz ليُفك الترميز مباشرة بهذا التردد (ذاكرة أقل)
         var ctx;
         try { ctx = new AudioCtx({ sampleRate: WAV_RATE }); } catch (e) { ctx = new AudioCtx(); }
 
@@ -1164,9 +1265,9 @@
 
       /* ====== محرك Gemini ====== */
       var GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent';
-      var REQUEST_TIMEOUT_MS = 180000; // 3 دقائق لكل محاولة
+      var REQUEST_TIMEOUT_MS = 180000;
       var ERROR_TOAST_MS = 9000;
-      var MAX_ATTEMPTS = 2; // محاولة أولى + إعادة تلقائية واحدة
+      var MAX_ATTEMPTS = 2;
 
       var PROMPT_BASE =
         'أنت مساعد ذكي. قم بتحليل هذا الملف الصوتي (محاضرة أو اجتماع) وأعد النتيجة بصيغة JSON حصرية تحتوي على المفاتيح التالية: ' +
@@ -1201,10 +1302,9 @@
       };
 
       var isProcessing = false;
-      var runAbort = null;   // AbortController للعملية الحالية (يُستخدم للإلغاء)
-      var payload = null;    // { base64, mime } محفوظ لإعادة المحاولة اليدوية دون إعادة التحويل
+      var runAbort = null;
+      var payload = null;
 
-      // خطأ مُعدّ للعرض على المستخدم (رسالة عربية + تفاصيل تقنية + قابلية إعادة المحاولة)
       function fail(message, detail, retryable) {
         var err = new Error(message);
         err.userFacing = true;
@@ -1234,7 +1334,6 @@
         });
       }
 
-      // ينتظر عودة الإنترنت (حتى مدة قصوى) قبل إعادة المحاولة
       function waitForOnline(ctrl, maxMs) {
         if (navigator.onLine !== false) return Promise.resolve();
         return new Promise(function (resolve, reject) {
@@ -1339,7 +1438,6 @@
 
         var res;
         try {
-          // المفتاح يُرسل في الترويسة x-goog-api-key (وليس في الرابط)
           res = await fetch(GEMINI_URL, {
             method: 'POST',
             headers: {
@@ -1405,7 +1503,6 @@
         return normalizeResult(parsed);
       }
 
-      // محاولة واحدة: مهلة خاصة بها، وتبديل تلقائي لخطوة العرض
       async function attemptGemini(apiKey, data, runCtrl) {
         var ctrl = new AbortController();
         var timedOut = false;
@@ -1447,7 +1544,6 @@
         runAbort = null;
       }
 
-      // إرسال الطلب مع إعادة محاولة تلقائية واحدة، ثم شاشة خطأ مع زر يدوي
       async function runRequest(myAbort) {
         var apiKey = getKey();
         var data = payload;
@@ -1462,15 +1558,17 @@
             await delay(500, myAbort);
 
             finishProcessing();
-            showWorkspace(result);
+
+            // حفظ النتيجة في السجل المحلي ثم عرضها في مساحة العمل
+            var item = addToHistory(result);
+            openItem(item.id);
             showToast('تم التلخيص بنجاح');
             return;
           } catch (err) {
-            if (myAbort.signal.aborted) return; // أُلغيت العملية من المستخدم
+            if (myAbort.signal.aborted) return;
             console.error('Attempt ' + attempt + ' failed:', err);
 
             if (!(err && err.retryable)) {
-              // خطأ غير قابل لإعادة المحاولة (مفتاح خاطئ، صيغة غير مدعومة...)
               finishProcessing();
               showToast(describeError(err), ERROR_TOAST_MS);
               return;
@@ -1483,13 +1581,12 @@
                 await waitForOnline(myAbort, 15000);
                 await delay(2000, myAbort);
               } catch (e2) {
-                return; // أُلغيت العملية أثناء الانتظار
+                return;
               }
             }
           }
         }
 
-        // فشل نهائي: نُبقي الشاشة مفتوحة مع زر إعادة المحاولة اليدوية
         showErrorView(lastErr.message, lastErr.detail);
       }
 
@@ -1514,7 +1611,6 @@
           var sendBlob = blob;
           var sendMime = mime;
 
-          // تحويل إلى WAV (16kHz Mono) قبل الإرسال عند الحاجة
           if (needsConversion(mime)) {
             sendBlob = await convertToWav(blob);
             sendMime = 'audio/wav';
@@ -1527,7 +1623,7 @@
 
           payload = { base64: base64, mime: sendMime };
         } catch (err) {
-          if (myAbort.signal.aborted) return; // أُلغيت العملية من المستخدم
+          if (myAbort.signal.aborted) return;
           finishProcessing();
           showToast(describeError(err), ERROR_TOAST_MS);
           return;
@@ -1536,7 +1632,6 @@
         await runRequest(myAbort);
       }
 
-      // زر الإلغاء / الإغلاق
       cancelLoadingBtn.addEventListener('click', function () {
         if (loadingMode === 'busy') {
           if (runAbort) runAbort.abort();
@@ -1547,7 +1642,6 @@
         }
       });
 
-      // إعادة المحاولة اليدوية (تستخدم نفس البيانات المجهّزة دون إعادة التحويل)
       retryBtn.addEventListener('click', function () {
         if (!isProcessing || !payload) return;
         var myAbort = new AbortController();
@@ -1575,27 +1669,7 @@
         summarize(selectedFile, EXT_MIME[getExt(selectedFile.name)] || baseMime(selectedFile.type));
       });
 
-      /* ====== مساحة العمل (Workspace) ====== */
-      var TAB_ACTIVE = ['bg-brand', 'text-white', 'shadow'];
-      var TAB_IDLE = ['text-slate-600', 'dark:text-slate-300', 'hover:bg-slate-100', 'dark:hover:bg-slate-700'];
-
-      function selectTab(name) {
-        tabBtns.forEach(function (btn) {
-          var active = btn.getAttribute('data-tab') === name;
-          TAB_ACTIVE.forEach(function (c) { btn.classList.toggle(c, active); });
-          TAB_IDLE.forEach(function (c) { btn.classList.toggle(c, !active); });
-          btn.setAttribute('aria-selected', active ? 'true' : 'false');
-        });
-        panels.forEach(function (p) {
-          p.classList.toggle('hidden', p.getAttribute('data-panel') !== name);
-        });
-      }
-
-      tabBtns.forEach(function (btn) {
-        btn.addEventListener('click', function () { selectTab(btn.getAttribute('data-tab')); });
-      });
-
-      // إنشاء عنصر مع نص آمن (textContent فقط)
+      /* ====== أدوات بناء العناصر (textContent فقط) ====== */
       function el(tag, className, text) {
         var node = document.createElement(tag);
         if (className) node.className = className;
@@ -1618,13 +1692,261 @@
         return el('p', 'text-sm text-slate-400 dark:text-slate-500', text);
       }
 
-      function renderSummary(data) {
+      /* ====== السجل المحلي (History) ====== */
+      var HISTORY_KEY = 'summaries_history';
+      var MAX_HISTORY = 100;
+      var DEFAULT_TITLE = 'ملخص بدون عنوان';
+
+      var historyItems = [];
+      var currentId = null;
+      var saveTimer = null;
+      var lastSaveFailed = false;
+
+      function genId() {
+        return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      }
+
+      function sanitizeTask(t) {
+        if (!t || typeof t !== 'object') return null;
+        var text = str(t.task);
+        if (!text) return null;
+        return {
+          id: str(t.id) || genId(),
+          task: text,
+          assignee: str(t.assignee),
+          deadline: str(t.deadline),
+          done: t.done === true
+        };
+      }
+
+      function sanitizeItem(raw) {
+        if (!raw || typeof raw !== 'object') return null;
+        if (raw.id === undefined || raw.id === null) return null;
+        return {
+          id: raw.id,
+          date: typeof raw.date === 'string' && raw.date ? raw.date : new Date(Number(raw.id) || Date.now()).toISOString(),
+          title: str(raw.title) || DEFAULT_TITLE,
+          executive_summary: str(raw.executive_summary),
+          key_points: Array.isArray(raw.key_points) ? raw.key_points.map(str).filter(Boolean) : [],
+          action_items: (Array.isArray(raw.action_items) ? raw.action_items : []).map(sanitizeTask).filter(Boolean),
+          full_transcript: str(raw.full_transcript)
+        };
+      }
+
+      function loadHistory() {
+        try {
+          var raw = localStorage.getItem(HISTORY_KEY);
+          if (!raw) return [];
+          var arr = JSON.parse(raw);
+          if (!Array.isArray(arr)) return [];
+          return arr.map(sanitizeItem).filter(Boolean);
+        } catch (e) {
+          console.warn('تعذّر قراءة السجل:', e);
+          return [];
+        }
+      }
+
+      function saveHistory() {
+        try {
+          localStorage.setItem(HISTORY_KEY, JSON.stringify(historyItems));
+          lastSaveFailed = false;
+          return true;
+        } catch (e) {
+          console.warn('تعذّر حفظ السجل:', e);
+          if (!lastSaveFailed) {
+            showToast('تعذّر حفظ السجل (مساحة التخزين ممتلئة أو معطّلة). احذف بعض الملخصات القديمة.', ERROR_TOAST_MS);
+          }
+          lastSaveFailed = true;
+          return false;
+        }
+      }
+
+      // حفظ مؤجّل قصير (للعنوان أثناء الكتابة)
+      function scheduleSave() {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(function () {
+          saveTimer = null;
+          saveHistory();
+          renderHistory();
+        }, 300);
+      }
+
+      function flushSave() {
+        if (saveTimer) {
+          clearTimeout(saveTimer);
+          saveTimer = null;
+          saveHistory();
+          renderHistory();
+        }
+      }
+
+      function findIndex(id) {
+        for (var i = 0; i < historyItems.length; i++) {
+          if (String(historyItems[i].id) === String(id)) return i;
+        }
+        return -1;
+      }
+
+      function findItem(id) {
+        var i = findIndex(id);
+        return i === -1 ? null : historyItems[i];
+      }
+
+      function getCurrent() {
+        return currentId === null ? null : findItem(currentId);
+      }
+
+      function addToHistory(result) {
+        var id = Date.now();
+        while (findIndex(id) !== -1) id++;
+
+        var item = {
+          id: id,
+          date: new Date().toISOString(),
+          title: result.title,
+          executive_summary: result.executive_summary,
+          key_points: result.key_points.slice(),
+          action_items: result.action_items.map(function (t) {
+            return { id: genId(), task: t.task, assignee: t.assignee, deadline: t.deadline, done: false };
+          }),
+          full_transcript: result.full_transcript
+        };
+
+        historyItems.unshift(item);
+        if (historyItems.length > MAX_HISTORY) historyItems.length = MAX_HISTORY;
+        saveHistory();
+        renderHistory();
+        return item;
+      }
+
+      function formatDate(iso) {
+        try {
+          var d = new Date(iso);
+          if (isNaN(d.getTime())) return '';
+          return d.toLocaleString('ar-DZ', {
+            year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+          });
+        } catch (e) {
+          return '';
+        }
+      }
+
+      // تطبيع بسيط للبحث بالعربية (إزالة التشكيل وتوحيد الألف والياء والتاء المربوطة)
+      function normSearch(s) {
+        return String(s).toLowerCase()
+          .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+          .replace(/[أإآ]/g, 'ا')
+          .replace(/ى/g, 'ي')
+          .replace(/ة/g, 'ه');
+      }
+
+      function renderHistory() {
+        var q = normSearch(historySearch.value.trim());
+        var list = historyItems.filter(function (h) {
+          return !q || normSearch(h.title).indexOf(q) !== -1;
+        });
+
+        historyList.replaceChildren();
+
+        if (!historyItems.length || !list.length) {
+          var empty = el('div', 'h-full min-h-[10rem] flex flex-col items-center justify-center text-center text-slate-400 dark:text-slate-500 gap-3');
+          empty.appendChild(el('i', (historyItems.length ? 'fa-solid fa-magnifying-glass' : 'fa-regular fa-folder-open') + ' text-4xl'));
+          empty.appendChild(el('p', 'text-sm', historyItems.length ? 'لا توجد نتائج مطابقة' : 'لا توجد ملخصات بعد'));
+          historyList.appendChild(empty);
+          return;
+        }
+
+        var ul = el('ul', 'space-y-1');
+        list.forEach(function (h) {
+          var active = currentId !== null && String(currentId) === String(h.id);
+          var li = el('li', 'flex items-stretch gap-1 rounded-xl border transition-colors ' +
+            (active
+              ? 'bg-brand-50 border-brand/40 dark:bg-slate-700 dark:border-brand-400/40'
+              : 'border-transparent hover:bg-slate-100 dark:hover:bg-slate-700/60'));
+
+          var openBtn = el('button', 'flex-1 min-w-0 text-right px-3 py-2.5 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand');
+          openBtn.type = 'button';
+          openBtn.setAttribute('data-action', 'open');
+          openBtn.setAttribute('data-id', String(h.id));
+
+          var title = el('span', 'block font-semibold text-sm truncate', h.title);
+          title.setAttribute('dir', 'auto');
+          openBtn.appendChild(title);
+          openBtn.appendChild(el('span', 'block text-xs text-slate-400 dark:text-slate-500 mt-0.5', formatDate(h.date)));
+
+          var delBtn = el('button', 'w-9 shrink-0 rounded-xl flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400');
+          delBtn.type = 'button';
+          delBtn.setAttribute('data-action', 'delete');
+          delBtn.setAttribute('data-id', String(h.id));
+          delBtn.setAttribute('aria-label', 'حذف الملخص');
+          delBtn.appendChild(el('i', 'fa-regular fa-trash-can text-sm'));
+
+          li.appendChild(openBtn);
+          li.appendChild(delBtn);
+          ul.appendChild(li);
+        });
+        historyList.appendChild(ul);
+      }
+
+      function deleteHistoryItem(id) {
+        var idx = findIndex(id);
+        if (idx === -1) return;
+        if (!window.confirm('هل تريد حذف هذا الملخص نهائياً من السجل؟')) return;
+
+        flushSave();
+        historyItems.splice(idx, 1);
+        saveHistory();
+
+        if (currentId !== null && String(currentId) === String(id)) {
+          currentId = null;
+          workspaceView.classList.add('hidden');
+          homeView.classList.remove('hidden');
+        }
+        renderHistory();
+        showToast('تم حذف الملخص');
+      }
+
+      historyList.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        var id = btn.getAttribute('data-id');
+        if (btn.getAttribute('data-action') === 'open') {
+          openItem(id);
+          closeSidebar();
+        } else if (btn.getAttribute('data-action') === 'delete') {
+          deleteHistoryItem(id);
+        }
+      });
+
+      historySearch.addEventListener('input', renderHistory);
+
+      /* ====== مساحة العمل (Workspace) ====== */
+      var TAB_ACTIVE = ['bg-brand', 'text-white', 'shadow'];
+      var TAB_IDLE = ['text-slate-600', 'dark:text-slate-300', 'hover:bg-slate-100', 'dark:hover:bg-slate-700'];
+
+      function selectTab(name) {
+        tabBtns.forEach(function (btn) {
+          var active = btn.getAttribute('data-tab') === name;
+          TAB_ACTIVE.forEach(function (c) { btn.classList.toggle(c, active); });
+          TAB_IDLE.forEach(function (c) { btn.classList.toggle(c, !active); });
+          btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        panels.forEach(function (p) {
+          p.classList.toggle('hidden', p.getAttribute('data-panel') !== name);
+        });
+      }
+
+      tabBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () { selectTab(btn.getAttribute('data-tab')); });
+      });
+
+      function renderSummary(item) {
         panelSummary.replaceChildren();
 
         var c1 = el('div', CARD);
         c1.appendChild(cardTitle('fa-bolt', 'الملخص التنفيذي'));
-        if (data.executive_summary) {
-          var p = el('p', 'leading-loose whitespace-pre-line', data.executive_summary);
+        if (item.executive_summary) {
+          var p = el('p', 'leading-loose whitespace-pre-line', item.executive_summary);
           p.setAttribute('dir', 'auto');
           c1.appendChild(p);
         } else {
@@ -1634,9 +1956,9 @@
 
         var c2 = el('div', CARD);
         c2.appendChild(cardTitle('fa-list-ul', 'النقاط الرئيسية'));
-        if (data.key_points.length) {
+        if (item.key_points.length) {
           var ul = el('ul', 'list-disc ps-5 space-y-2 leading-relaxed marker:text-brand');
-          data.key_points.forEach(function (pt) {
+          item.key_points.forEach(function (pt) {
             var li = el('li', '', pt);
             li.setAttribute('dir', 'auto');
             ul.appendChild(li);
@@ -1648,47 +1970,13 @@
         panelSummary.appendChild(c2);
       }
 
-      function renderTasks(data) {
-        panelTasks.replaceChildren();
-
-        if (!data.action_items.length) {
-          var empty = el('div', CARD + ' text-center');
-          empty.appendChild(emptyNote('لا توجد مهام مستخرجة من هذا التسجيل'));
-          panelTasks.appendChild(empty);
-          return;
-        }
-
-        data.action_items.forEach(function (item) {
-          var card = el('div', CARD + ' space-y-3');
-
-          var task = el('p', 'font-bold leading-relaxed', item.task);
-          task.setAttribute('dir', 'auto');
-          card.appendChild(task);
-
-          var meta = el('div', 'flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-500 dark:text-slate-400');
-
-          var who = el('span', 'flex items-center gap-1.5');
-          who.appendChild(el('i', 'fa-regular fa-user text-xs'));
-          who.appendChild(el('span', '', item.assignee));
-          meta.appendChild(who);
-
-          var when = el('span', 'flex items-center gap-1.5');
-          when.appendChild(el('i', 'fa-regular fa-calendar text-xs'));
-          when.appendChild(el('span', '', item.deadline));
-          meta.appendChild(when);
-
-          card.appendChild(meta);
-          panelTasks.appendChild(card);
-        });
-      }
-
-      function renderTranscript(data) {
+      function renderTranscript(item) {
         panelTranscript.replaceChildren();
 
         var card = el('div', CARD);
         card.appendChild(cardTitle('fa-file-lines', 'النص الكامل'));
-        if (data.full_transcript) {
-          var p = el('p', 'leading-loose whitespace-pre-wrap text-slate-700 dark:text-slate-200', data.full_transcript);
+        if (item.full_transcript) {
+          var p = el('p', 'leading-loose whitespace-pre-wrap text-slate-700 dark:text-slate-200', item.full_transcript);
           p.setAttribute('dir', 'auto');
           card.appendChild(p);
         } else {
@@ -1697,21 +1985,350 @@
         panelTranscript.appendChild(card);
       }
 
-      function showWorkspace(data) {
-        titleInput.value = data.title; // value وليس innerHTML
-        renderSummary(data);
-        renderTasks(data);
-        renderTranscript(data);
+      /* ====== المهام التفاعلية ====== */
+      function knownValue(v) {
+        var s = str(v);
+        return (s && s !== 'غير محدد') ? s : '';
+      }
+
+      function updateTaskCounter() {
+        var item = getCurrent();
+        var total = item ? item.action_items.length : 0;
+        if (!total) {
+          taskCounter.classList.add('hidden');
+          return;
+        }
+        var done = item.action_items.filter(function (t) { return t.done; }).length;
+        taskCounter.textContent = done + ' من ' + total + ' مهام مكتملة';
+        taskCounter.classList.remove('hidden');
+      }
+
+      function buildTaskRow(t) {
+        var card = el('div', 'flex items-start gap-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm p-4 transition-opacity');
+
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.id = 'task-' + t.id;
+        cb.checked = !!t.done;
+        cb.className = 'mt-1 w-5 h-5 shrink-0 accent-brand cursor-pointer';
+        cb.setAttribute('aria-label', 'تحديد المهمة كمكتملة');
+
+        var body = el('label', 'flex-1 min-w-0 cursor-pointer space-y-1.5');
+        body.setAttribute('for', cb.id);
+
+        var text = el('p', 'font-bold leading-relaxed break-words', t.task);
+        text.setAttribute('dir', 'auto');
+        body.appendChild(text);
+
+        var who = knownValue(t.assignee);
+        var when = knownValue(t.deadline);
+        if (who || when) {
+          var meta = el('div', 'flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-500 dark:text-slate-400');
+          if (who) {
+            var w = el('span', 'flex items-center gap-1.5');
+            w.appendChild(el('i', 'fa-regular fa-user text-xs'));
+            w.appendChild(el('span', '', who));
+            meta.appendChild(w);
+          }
+          if (when) {
+            var d = el('span', 'flex items-center gap-1.5');
+            d.appendChild(el('i', 'fa-regular fa-calendar text-xs'));
+            d.appendChild(el('span', '', when));
+            meta.appendChild(d);
+          }
+          body.appendChild(meta);
+        }
+
+        var del = el('button', 'w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400');
+        del.type = 'button';
+        del.setAttribute('aria-label', 'حذف المهمة');
+        del.appendChild(el('i', 'fa-regular fa-trash-can text-sm'));
+
+        function applyDone() {
+          card.classList.toggle('opacity-60', cb.checked);
+          text.classList.toggle('line-through', cb.checked);
+        }
+        applyDone();
+
+        cb.addEventListener('change', function () {
+          t.done = cb.checked;
+          applyDone();
+          saveHistory();
+          updateTaskCounter();
+        });
+
+        del.addEventListener('click', function () { deleteTask(t.id); });
+
+        card.appendChild(cb);
+        card.appendChild(body);
+        card.appendChild(del);
+        return card;
+      }
+
+      function renderTasks(item) {
+        tasksList.replaceChildren();
+
+        if (!item.action_items.length) {
+          var empty = el('div', CARD + ' text-center');
+          empty.appendChild(emptyNote('لا توجد مهام. أضف مهمة جديدة من الحقل أدناه.'));
+          tasksList.appendChild(empty);
+        } else {
+          item.action_items.forEach(function (t) { tasksList.appendChild(buildTaskRow(t)); });
+        }
+        updateTaskCounter();
+      }
+
+      function deleteTask(id) {
+        var item = getCurrent();
+        if (!item) return;
+        item.action_items = item.action_items.filter(function (t) { return t.id !== id; });
+        saveHistory();
+        renderTasks(item);
+      }
+
+      taskForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var item = getCurrent();
+        if (!item) return;
+
+        var value = taskInput.value.trim();
+        if (!value) { showToast('اكتب نص المهمة أولاً'); return; }
+
+        item.action_items.push({ id: genId(), task: value, assignee: '', deadline: '', done: false });
+        saveHistory();
+        taskInput.value = '';
+        renderTasks(item);
+        taskInput.focus();
+      });
+
+      /* ====== فتح عنصر من السجل / العنوان القابل للتعديل ====== */
+      function openItem(id) {
+        flushSave();
+        var item = findItem(id);
+        if (!item) return;
+
+        currentId = item.id;
+        titleInput.value = item.title; // value وليس innerHTML
+        summaryDate.textContent = item.date ? 'تاريخ الإنشاء: ' + formatDate(item.date) : '';
+        renderSummary(item);
+        renderTasks(item);
+        renderTranscript(item);
         selectTab('summary');
+
         homeView.classList.add('hidden');
         workspaceView.classList.remove('hidden');
+        renderHistory();
         window.scrollTo(0, 0);
       }
 
+      titleInput.addEventListener('input', function () {
+        var item = getCurrent();
+        if (!item) return;
+        item.title = titleInput.value; // يُحدَّث في الذاكرة فوراً ويُكتب في localStorage بعد 300 مللي ثانية
+        scheduleSave();
+      });
+
+      titleInput.addEventListener('blur', function () {
+        var item = getCurrent();
+        if (!item) return;
+        var v = titleInput.value.trim() || DEFAULT_TITLE;
+        titleInput.value = v;
+        item.title = v;
+        clearTimeout(saveTimer);
+        saveTimer = null;
+        saveHistory();
+        renderHistory();
+      });
+
       backBtn.addEventListener('click', function () {
+        flushSave();
+        currentId = null;
         workspaceView.classList.add('hidden');
         homeView.classList.remove('hidden');
+        renderHistory();
         window.scrollTo(0, 0);
+      });
+
+      window.addEventListener('pagehide', flushSave);
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') flushSave();
+      });
+
+      /* ====== التصدير: نسخ / Markdown / PDF ====== */
+      function metaLine(t) {
+        var parts = [];
+        var who = knownValue(t.assignee);
+        var when = knownValue(t.deadline);
+        if (who) parts.push('المسؤول: ' + who);
+        if (when) parts.push('الموعد: ' + when);
+        return parts.join('، ');
+      }
+
+      // نص منسّق للواتساب (العناوين بين نجمتين = عريض)
+      function buildShareText(item) {
+        var L = [];
+        L.push('*' + item.title + '*');
+
+        if (item.executive_summary) {
+          L.push('', '📝 *الملخص*', item.executive_summary);
+        }
+        if (item.key_points.length) {
+          L.push('', '📌 *النقاط الرئيسية*');
+          item.key_points.forEach(function (p) { L.push('• ' + p); });
+        }
+        if (item.action_items.length) {
+          L.push('', '✅ *المهام*');
+          item.action_items.forEach(function (t) {
+            var m = metaLine(t);
+            L.push((t.done ? '☑️ ' : '⬜ ') + t.task + (m ? ' (' + m + ')' : ''));
+          });
+        }
+        return L.join('\n');
+      }
+
+      function buildMarkdown(item) {
+        var L = [];
+        L.push('# ' + item.title, '');
+        var date = formatDate(item.date);
+        if (date) L.push('> تاريخ الإنشاء: ' + date, '');
+
+        L.push('## الملخص التنفيذي', '', item.executive_summary || '_لا يوجد ملخص_', '');
+
+        L.push('## النقاط الرئيسية', '');
+        if (item.key_points.length) {
+          item.key_points.forEach(function (p) { L.push('- ' + p); });
+        } else {
+          L.push('_لا توجد نقاط_');
+        }
+        L.push('');
+
+        L.push('## المهام', '');
+        if (item.action_items.length) {
+          item.action_items.forEach(function (t) {
+            var m = metaLine(t);
+            L.push('- [' + (t.done ? 'x' : ' ') + '] ' + t.task + (m ? ' — ' + m : ''));
+          });
+        } else {
+          L.push('_لا توجد مهام_');
+        }
+        L.push('');
+
+        L.push('## النص الكامل', '', item.full_transcript || '_لا يوجد نص_', '');
+        return L.join('\n');
+      }
+
+      async function copyToClipboard(text) {
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return true;
+          }
+        } catch (e) { /* ننتقل للطريقة الاحتياطية */ }
+
+        try {
+          var ta = document.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'fixed';
+          ta.style.top = '-1000px';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          var ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+          return ok;
+        } catch (e) {
+          return false;
+        }
+      }
+
+      function safeFileName(title) {
+        var name = String(title || '').replace(/[\\\/:*?"<>|\r\n\t]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 60);
+        return name || 'ملخص';
+      }
+
+      function downloadTextFile(filename, text, mime) {
+        var blob = new Blob([text], { type: mime });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      }
+
+      function requireCurrent() {
+        flushSave();
+        var item = getCurrent();
+        if (!item) showToast('لا يوجد ملخص مفتوح');
+        return item;
+      }
+
+      copyBtn.addEventListener('click', async function () {
+        var item = requireCurrent();
+        if (!item) return;
+        var ok = await copyToClipboard(buildShareText(item));
+        showToast(ok ? 'تم النسخ' : 'تعذّر النسخ. جرّب مرة أخرى.');
+      });
+
+      exportMdBtn.addEventListener('click', function () {
+        var item = requireCurrent();
+        if (!item) return;
+        downloadTextFile(safeFileName(item.title) + '.md', buildMarkdown(item), 'text/markdown;charset=utf-8');
+        showToast('تم تجهيز ملف Markdown');
+      });
+
+      // بناء منطقة الطباعة (العنوان، الملخص، النقاط، المهام، النص الكامل)
+      function buildPrintArea(item) {
+        printArea.replaceChildren();
+
+        printArea.appendChild(el('h1', '', item.title));
+        var date = formatDate(item.date);
+        if (date) printArea.appendChild(el('p', 'print-date', 'تاريخ الإنشاء: ' + date));
+
+        printArea.appendChild(el('h2', '', 'الملخص التنفيذي'));
+        printArea.appendChild(el('p', '', item.executive_summary || 'لا يوجد ملخص'));
+
+        printArea.appendChild(el('h2', '', 'النقاط الرئيسية'));
+        if (item.key_points.length) {
+          var ul = el('ul');
+          item.key_points.forEach(function (pt) { ul.appendChild(el('li', '', pt)); });
+          printArea.appendChild(ul);
+        } else {
+          printArea.appendChild(el('p', '', 'لا توجد نقاط'));
+        }
+
+        printArea.appendChild(el('h2', '', 'المهام'));
+        if (item.action_items.length) {
+          item.action_items.forEach(function (t) {
+            var row = el('div', 'print-task');
+            row.appendChild(el('span', '', (t.done ? '☑ ' : '☐ ') + t.task));
+            var m = metaLine(t);
+            if (m) row.appendChild(el('div', 'print-meta', m));
+            printArea.appendChild(row);
+          });
+        } else {
+          printArea.appendChild(el('p', '', 'لا توجد مهام'));
+        }
+
+        printArea.appendChild(el('h2', '', 'النص الكامل'));
+        printArea.appendChild(el('p', 'print-transcript', item.full_transcript || 'لا يوجد نص'));
+      }
+
+      exportPdfBtn.addEventListener('click', function () {
+        var item = requireCurrent();
+        if (!item) return;
+        buildPrintArea(item);
+        document.title = safeFileName(item.title); // اسم ملف PDF الافتراضي
+        window.print();
+      });
+
+      window.addEventListener('afterprint', function () {
+        document.title = BASE_TITLE;
+        printArea.replaceChildren();
       });
 
       /* ====== أحداث الواجهة العامة ====== */
@@ -1733,8 +2350,11 @@
         else if (isSidebarOpen()) closeSidebar();
       });
 
+      /* ====== التهيئة ====== */
       syncThemeColor();
       updateKeyUI();
+      historyItems = loadHistory();
+      renderHistory();
 
       /* ====== تسجيل Service Worker ====== */
       if ('serviceWorker' in navigator) {
@@ -1747,4 +2367,4 @@
     })();
   </script>
 </body>
-  </html>
+        </html>
