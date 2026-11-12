@@ -1017,92 +1017,118 @@ function geminiUrl(model) {
   return normalizeResult(parsed);
       }
 
-      async function attemptGemini(apiKey, data, runCtrl) {
-        var ctrl = new AbortController();
-        var timedOut = false;
-        function onRunAbort() { ctrl.abort(); }
-        runCtrl.signal.addEventListener('abort', onRunAbort);
-        var timeoutId = setTimeout(function () { timedOut = true; ctrl.abort(); }, REQUEST_TIMEOUT_MS);
+// محاولة واحدة مع نموذج محدد، بمهلة 45 ثانية
+async function attemptGemini(apiKey, data, runCtrl, model, isFallback) {
+  var ctrl = new AbortController();
+  var timedOut = false;
+  function onRunAbort() { ctrl.abort(); }
+  runCtrl.signal.addEventListener('abort', onRunAbort);
+  var timeoutId = setTimeout(function () { timedOut = true; ctrl.abort(); }, ATTEMPT_TIMEOUT_MS);
 
-        setStage(1);
-        clearStageTimer();
-        stageTimer = setTimeout(function () {
-          if (loadingMode === 'busy' && currentStage === 1) setStage(2);
-        }, STEP_SWITCH_MS);
+  if (!isFallback) {
+    setStage(1);
+    clearStageTimer();
+    stageTimer = setTimeout(function () {
+      if (loadingMode === 'busy' && currentStage === 1) setStage(2);
+    }, STEP_SWITCH_MS);
+  }
+  // في النموذج الاحتياطي يبقى نص "الخوادم مزدحمة..." ظاهراً
 
-        try {
-          return await callGemini(apiKey, data.base64, data.mime, ctrl.signal);
-        } catch (e) {
-          if (e && e.name === 'AbortError' && timedOut && !runCtrl.signal.aborted) {
-            throw fail('انتهت مهلة الطلب. الاتصال بطيء أو الملف طويل.',
-              'timeout بعد ' + (REQUEST_TIMEOUT_MS / 1000) + ' ثانية', true);
-          }
-          throw e;
-        } finally {
-          clearTimeout(timeoutId);
-          clearStageTimer();
-          runCtrl.signal.removeEventListener('abort', onRunAbort);
-        }
-      }
+  try {
+    return await callGemini(apiKey, data.base64, data.mime, ctrl.signal, model);
+  } catch (e) {
+    if (e && e.name === 'AbortError' && timedOut && !runCtrl.signal.aborted) {
+      var te = fail('انتهت مهلة الطلب. الخوادم بطيئة أو الملف طويل.',
+        'timeout بعد ' + (ATTEMPT_TIMEOUT_MS / 1000) + ' ثانية (' + model + ')', true);
+      te.fallback = true; // انتهاء المهلة = انتقال صامت للنموذج التالي
+      throw te;
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeoutId);
+    clearStageTimer();
+    runCtrl.signal.removeEventListener('abort', onRunAbort);
+  }
+}
 
-      function describeError(err) {
-        console.error('Summarize error:', err);
-        if (err && err.userFacing) return err.message + (err.detail ? '\n' + err.detail : '');
-        return 'حدث خطأ غير متوقع:\n' + ((err && err.name) || 'Error') + ': ' + ((err && err.message) || '');
-      }
+function describeError(err) {
+  console.error('Summarize error:', err);
+  if (err && err.userFacing) return err.message + (err.detail ? '\n' + err.detail : '');
+  return 'حدث خطأ غير متوقع:\n' + ((err && err.name) || 'Error') + ': ' + ((err && err.message) || '');
+}
 
-      function finishProcessing() {
-        closeLoading();
-        isProcessing = false;
-        payload = null;
-        runAbort = null;
-      }
+function finishProcessing() {
+  closeLoading();
+  isProcessing = false;
+  payload = null;
+  runAbort = null;
+}
 
-      async function runRequest(myAbort) {
-        var apiKey = getKey();
-        var data = payload;
-        var lastErr = null;
+// الشلال: النموذج الأول ثم الاحتياطي. الخطأ يظهر فقط إذا فشلا معاً
+async function runRequest(myAbort) {
+  var apiKey = getKey();
+  var data = payload;
+  var lastErr = null;
 
-        for (var attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-          try {
-            var result = await attemptGemini(apiKey, data, myAbort);
-            if (myAbort.signal.aborted) return;
+  for (var m = 0; m < MODELS.length; m++) {
+    var isFallback = m > 0;
+    var netRetried = false;
+    var moveOn = false;
 
-            setStage(3);
-            await delay(500, myAbort);
+    while (!moveOn) {
+      try {
+        var result = await attemptGemini(apiKey, data, myAbort, MODELS[m], isFallback);
+        if (myAbort.signal.aborted) return;
 
+        setStage(3);
+        await delay(500, myAbort);
+
+        finishProcessing();
+
+        // حفظ النتيجة في السجل المحلي ثم عرضها في مساحة العمل
+        var item = addToHistory(result);
+        openItem(item.id);
+        showToast('تم التلخيص بنجاح');
+        return;
+      } catch (err) {
+        if (myAbort.signal.aborted) return;
+        console.error('Model ' + MODELS[m] + ' failed:', err);
+        lastErr = err;
+
+        if (err && err.fallback) {
+          moveOn = true; // 503 / 429 / مهلة: ننتقل للنموذج التالي
+        } else if (!(err && err.retryable)) {
+          // خطأ نهائي (مفتاح خاطئ، صوت تالف...)
+          if (m === 0) {
             finishProcessing();
-
-            // حفظ النتيجة في السجل المحلي ثم عرضها في مساحة العمل
-            var item = addToHistory(result);
-            openItem(item.id);
-            showToast('تم التلخيص بنجاح');
+            showToast(describeError(err), ERROR_TOAST_MS);
             return;
-          } catch (err) {
-            if (myAbort.signal.aborted) return;
-            console.error('Attempt ' + attempt + ' failed:', err);
-
-            if (!(err && err.retryable)) {
-              finishProcessing();
-              showToast(describeError(err), ERROR_TOAST_MS);
-              return;
-            }
-
-            lastErr = err;
-            if (attempt < MAX_ATTEMPTS) {
-              loadingText.textContent = 'حدث خطأ في الاتصال، جاري إعادة المحاولة...';
-              try {
-                await waitForOnline(myAbort, 15000);
-                await delay(2000, myAbort);
-              } catch (e2) {
-                return;
-              }
-            }
           }
+          showErrorView(err.message || 'حدث خطأ غير متوقع.', err.detail);
+          return;
+        } else if (!netRetried) {
+          // انقطاع شبكة: إعادة محاولة واحدة لنفس النموذج
+          netRetried = true;
+          loadingText.textContent = 'حدث خطأ في الاتصال، جاري إعادة المحاولة...';
+          try {
+            await waitForOnline(myAbort, 15000);
+            await delay(2000, myAbort);
+          } catch (e2) {
+            return;
+          }
+        } else {
+          moveOn = true;
         }
-
-        showErrorView(lastErr.message, lastErr.detail);
       }
+    }
+
+    if (m < MODELS.length - 1) {
+      loadingText.textContent = FALLBACK_TEXT;
+    }
+  }
+
+  showErrorView(lastErr.message, lastErr.detail);
+}
 
       async function summarize(blob, mime) {
         if (isProcessing) return;
