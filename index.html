@@ -489,6 +489,30 @@
 
         <p id="keyStatus" class="text-xs text-slate-500 dark:text-slate-400"></p>
 
+        <div class="pt-4 mt-1 border-t border-slate-200 dark:border-slate-700 space-y-3">
+          <label for="groqApiKeyInput" class="flex items-center gap-2 font-bold">
+            <i class="fa-solid fa-bolt text-brand dark:text-brand-400" aria-hidden="true"></i>
+            مفتاح Groq API (احتياطي)
+          </label>
+
+          <div class="relative">
+            <input id="groqApiKeyInput" type="password" dir="ltr" placeholder="gsk_..."
+              autocomplete="off" autocapitalize="off" spellcheck="false"
+              class="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-400 pl-12 pr-4 py-3 text-left focus:outline-none focus:ring-2 focus:ring-brand" />
+            <button id="toggleGroqKeyBtn" type="button"
+              class="absolute left-1.5 top-1/2 -translate-y-1/2 w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              aria-label="إظهار المفتاح">
+              <i id="toggleGroqKeyIcon" class="fa-regular fa-eye" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <p class="text-xs text-slate-500 dark:text-slate-400">
+            احصل على مفتاح مجاني من
+            <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer"
+              class="text-brand dark:text-brand-400 hover:underline" dir="ltr">console.groq.com</a>
+          </p>
+        </div>
+
         <div class="flex gap-2 pt-1">
           <button type="submit"
             class="flex-1 flex items-center justify-center gap-2 rounded-xl bg-brand hover:bg-brand-700 text-white font-bold py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
@@ -502,7 +526,7 @@
         </div>
 
         <p class="text-xs text-slate-400 dark:text-slate-500 leading-relaxed">
-          يُحفظ المفتاح على هذا الجهاز فقط داخل المتصفح، ويُرسل إلى خوادم Google عند التلخيص.
+          يُحفظ المفتاح على هذا الجهاز فقط داخل المتصفح، ويُرسل إلى خوادم Google (وإلى Groq عند استخدام الاحتياط) عند التلخيص.
         </p>
       </form>
     </div>
@@ -560,6 +584,6 @@
   <!-- ========== منطقة الطباعة (مخفية على الشاشة، تظهر عند تصدير PDF) ========== -->
   <div id="printArea" class="hidden" dir="rtl" aria-hidden="true"></div>
 
-  <script src="app.js?v=12"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>

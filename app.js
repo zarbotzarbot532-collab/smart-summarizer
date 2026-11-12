@@ -26,6 +26,9 @@
       var toggleKeyIcon = $('toggleKeyIcon');
       var keyStatus = $('keyStatus');
       var deleteKeyBtn = $('deleteKeyBtn');
+      var groqApiKeyInput = $('groqApiKeyInput');
+      var toggleGroqKeyBtn = $('toggleGroqKeyBtn');
+      var toggleGroqKeyIcon = $('toggleGroqKeyIcon');
 
       /* ====== عناصر الاستقبال ====== */
       var homeView = $('homeView');
@@ -130,6 +133,7 @@
 
       function openModal() {
         updateKeyUI();
+        groqApiKeyInput.value = getGroqKey(); // مفتاح Groq يُعرض عند فتح الإعدادات
         settingsModal.classList.remove('hidden');
         settingsModal.classList.add('flex');
         document.body.classList.add('overflow-hidden');
@@ -141,7 +145,9 @@
         settingsModal.classList.remove('flex');
         document.body.classList.remove('overflow-hidden');
         apiKeyInput.value = '';
+        groqApiKeyInput.value = '';
         setKeyVisible(false);
+        setGroqVisible(false);
         settingsBtn.focus();
       }
 
@@ -162,6 +168,8 @@
       var KEY_STORAGE = 'gemini_api_key';
       // يقبل: AIzaSy... (30 حرفاً فأكثر) و AQ.... (25 حرفاً فأكثر)
       var KEY_PATTERN = /^(AIzaSy[A-Za-z0-9_\-]{24,}|AQ\.[A-Za-z0-9_\-.]{22,})$/;
+      var GROQ_KEY_STORAGE = 'groq_api_key';
+      var GROQ_PATTERN = /^gsk_[A-Za-z0-9_\-]{20,}$/;
       var BADGE_OK = ['bg-green-100', 'text-green-700', 'dark:bg-green-900/40', 'dark:text-green-400'];
       var BADGE_BAD = ['bg-red-100', 'text-red-700', 'dark:bg-red-900/40', 'dark:text-red-400'];
 
@@ -169,18 +177,22 @@
         try { return localStorage.getItem(KEY_STORAGE) || ''; } catch (e) { return ''; }
       }
 
+      function getGroqKey() {
+        try { return localStorage.getItem(GROQ_KEY_STORAGE) || ''; } catch (e) { return ''; }
+      }
+
       function updateKeyUI() {
         var key = getKey();
-        var has = key.length > 0;
+        var has = key.length > 0 || getGroqKey().length > 0; // أي مفتاح يكفي لاعتبار التطبيق متصلاً
 
         BADGE_OK.forEach(function (c) { keyBadge.classList.toggle(c, has); });
         BADGE_BAD.forEach(function (c) { keyBadge.classList.toggle(c, !has); });
         keyBadgeText.textContent = has ? 'متصل' : 'يرجى إدخال المفتاح';
 
-        keyStatus.textContent = has
+        keyStatus.textContent = key.length > 0
           ? 'يوجد مفتاح محفوظ (ينتهي بـ ' + key.slice(-4) + '). أدخل مفتاحاً جديداً لاستبداله.'
           : 'لا يوجد مفتاح محفوظ حالياً.';
-        deleteKeyBtn.classList.toggle('hidden', !has);
+        deleteKeyBtn.classList.toggle('hidden', key.length === 0);
       }
 
       function setKeyVisible(visible) {
@@ -190,26 +202,42 @@
         toggleKeyBtn.setAttribute('aria-label', visible ? 'إخفاء المفتاح' : 'إظهار المفتاح');
       }
 
+      function setGroqVisible(visible) {
+        groqApiKeyInput.type = visible ? 'text' : 'password';
+        toggleGroqKeyIcon.classList.toggle('fa-eye', !visible);
+        toggleGroqKeyIcon.classList.toggle('fa-eye-slash', visible);
+        toggleGroqKeyBtn.setAttribute('aria-label', visible ? 'إخفاء المفتاح' : 'إظهار المفتاح');
+      }
+
       toggleKeyBtn.addEventListener('click', function () {
         setKeyVisible(apiKeyInput.type === 'password');
       });
 
+      toggleGroqKeyBtn.addEventListener('click', function () {
+        setGroqVisible(groqApiKeyInput.type === 'password');
+      });
+
       keyForm.addEventListener('submit', function (e) {
         e.preventDefault();
-        var value = apiKeyInput.value.trim();
+        var gemini = apiKeyInput.value.trim();
+        var groq = groqApiKeyInput.value.trim();
+        var hadGroq = getGroqKey().length > 0;
 
-        if (!value) { showToast('أدخل مفتاح Gemini أولاً'); return; }
-        if (!KEY_PATTERN.test(value)) { showToast('صيغة المفتاح غير صحيحة، تأكد من نسخه كاملاً'); return; }
+        if (!gemini && !groq && !hadGroq) { showToast('أدخل مفتاحاً واحداً على الأقل (Gemini أو Groq)'); return; }
+        if (gemini && !KEY_PATTERN.test(gemini)) { showToast('صيغة مفتاح Gemini غير صحيحة، تأكد من نسخه كاملاً'); return; }
+        if (groq && !GROQ_PATTERN.test(groq)) { showToast('صيغة مفتاح Groq غير صحيحة، يجب أن يبدأ بـ gsk_'); return; }
 
         try {
-          localStorage.setItem(KEY_STORAGE, value);
+          if (gemini) localStorage.setItem(KEY_STORAGE, gemini);
+          if (groq) localStorage.setItem(GROQ_KEY_STORAGE, groq);
+          else if (hadGroq) localStorage.removeItem(GROQ_KEY_STORAGE); // حقل Groq فارغ = حذف المفتاح
         } catch (err) {
           showToast('تعذّر حفظ المفتاح (التخزين المحلي معطّل في المتصفح)');
           return;
         }
         updateKeyUI();
         closeModal();
-        showToast('تم حفظ المفتاح بنجاح');
+        showToast(!groq && hadGroq ? 'تم الحفظ وحذف مفتاح Groq' : 'تم حفظ المفتاح بنجاح');
       });
 
       deleteKeyBtn.addEventListener('click', function () {
@@ -759,10 +787,24 @@
 
       /* ====== محرك Gemini ====== */
       // نظام الاحتياط الصامت: تُجرَّب النماذج بالترتيب
-        var MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
+      var MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
       var ATTEMPT_TIMEOUT_MS = 45000;          // مهلة كل نموذج
       var FALLBACK_STATUSES = [503, 429];      // أخطاء تنقلنا للنموذج التالي بصمت
       var FALLBACK_TEXT = 'الخوادم مزدحمة، جاري استخدام النموذج الاحتياطي...';
+
+      // الطبقة الثالثة: Groq (تفريغ صوتي ثم تلخيص نصي)
+      var GROQ_STT_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
+      var GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
+      var GROQ_STT_MODEL = 'whisper-large-v3-turbo';
+      var GROQ_CHAT_MODEL = 'llama-3.3-70b-versatile';
+      var GROQ_TIMEOUT_MS = 60000;             // مهلة كل خطوة من خطوتي Groq
+      var GROQ_TEXT = 'جاري استخدام النموذج الاحتياطي السريع...';
+      var AUDIO_EXT = {
+        'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/wave': 'wav',
+        'audio/mp3': 'mp3', 'audio/mpeg': 'mp3',
+        'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/m4a': 'm4a',
+        'audio/ogg': 'ogg', 'audio/webm': 'webm', 'video/webm': 'webm'
+      };
 
       function geminiUrl(model) {
         return 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent';
@@ -1063,49 +1105,177 @@
         runAbort = null;
       }
 
-      // الشلال: النموذج الأول ثم الاحتياطي. الخطأ يظهر فقط إذا فشلا معاً
+      /* ====== الطبقة الثالثة: Groq ====== */
+      function groqErrorMessage(status, apiMsg) {
+        var msg = String(apiMsg || '');
+        if (status === 401) return 'مفتاح Groq غير صالح. تحقق منه في الإعدادات.';
+        if (status === 403) return 'مفتاح Groq لا يملك صلاحية استخدام هذه الخدمة.';
+        if (status === 429) return 'تجاوزت حد الاستخدام المجاني في Groq. حاول بعد قليل.';
+        if (status === 413) return 'حجم الملف أو النص كبير جداً على Groq.';
+        if (status === 400) {
+          if (/audio|file|format|media|transcri/i.test(msg)) return 'صيغة الصوت غير مدعومة لدى Groq أو الملف تالف.';
+          return 'تعذّر معالجة الطلب لدى Groq.';
+        }
+        if (status === 404) return 'نموذج Groq غير متاح حالياً.';
+        if (status >= 500) return 'خوادم Groq مشغولة حالياً.';
+        return 'حدث خطأ في الاتصال بخدمة Groq.';
+      }
+
+      // طلب إلى Groq بمهلة، مع ربطه بزر الإلغاء. يُرجع JSON الرد
+      async function groqFetch(url, options, runCtrl, timeoutMs) {
+        var ctrl = new AbortController();
+        var timedOut = false;
+        function onRunAbort() { ctrl.abort(); }
+        runCtrl.signal.addEventListener('abort', onRunAbort);
+        var timeoutId = setTimeout(function () { timedOut = true; ctrl.abort(); }, timeoutMs);
+        options.signal = ctrl.signal;
+
+        function timeoutError() {
+          return fail('انتهت مهلة الاتصال بـ Groq.', 'timeout بعد ' + (timeoutMs / 1000) + ' ثانية', true);
+        }
+
+        try {
+          var res;
+          try {
+            res = await fetch(url, options);
+          } catch (e) {
+            if (e && e.name === 'AbortError') {
+              if (timedOut && !runCtrl.signal.aborted) throw timeoutError();
+              throw e;
+            }
+            throw fail('تعذّر الاتصال بخوادم Groq. تحقق من اتصالك بالإنترنت.', e && e.message, true);
+          }
+
+          if (!res.ok) {
+            var errData = null;
+            try { errData = await res.json(); } catch (e) {}
+            var apiMsg = errData && errData.error && errData.error.message;
+            console.error('Groq HTTP error:', res.status, apiMsg || '(بلا رسالة)');
+            throw fail(
+              groqErrorMessage(res.status, apiMsg),
+              'Groq HTTP ' + res.status + (apiMsg ? ': ' + apiMsg : ''),
+              res.status >= 500 || res.status === 429 || res.status === 408
+            );
+          }
+
+          try {
+            return await res.json();
+          } catch (e) {
+            if (e && e.name === 'AbortError') {
+              if (timedOut && !runCtrl.signal.aborted) throw timeoutError();
+              throw e;
+            }
+            throw fail('انقطع الاتصال أثناء استلام رد Groq.', e && e.message, true);
+          }
+        } finally {
+          clearTimeout(timeoutId);
+          runCtrl.signal.removeEventListener('abort', onRunAbort);
+        }
+      }
+
+      var GROQ_SYSTEM_PROMPT =
+        'أنت مساعد ذكي. ستستلم النص المفرَّغ لمحاضرة أو اجتماع. أعد النتيجة بصيغة JSON حصرية تحتوي على المفاتيح التالية فقط: ' +
+        'title (عنوان ذكي)، executive_summary (ملخص في 3 أسطر)، key_points (مصفوفة من النقاط)، ' +
+        'action_items (مصفوفة من المهام كل مهمة تحتوي على task و assignee و deadline). ' +
+        'اكتب كل المحتوى بالعربية الفصحى المبسطة. إذا لم تُذكر مهام فأعد action_items كمصفوفة فارغة، ' +
+        'وإذا لم يُذكر المسؤول أو الموعد لمهمة ما فاكتب "غير محدد".';
+
+      // التفريغ الصوتي (Whisper) ثم التلخيص (Llama). full_transcript يأتي من Whisper مباشرة
+      async function summarizeWithGroq(blob, apiKey, runCtrl, mime) {
+        // الخطوة أ: تحويل الصوت إلى نص
+        var ext = AUDIO_EXT[baseMime(mime || blob.type)] || 'webm';
+        var fd = new FormData();
+        fd.append('file', blob, 'audio.' + ext);
+        fd.append('model', GROQ_STT_MODEL);
+        fd.append('language', 'ar');
+        fd.append('response_format', 'json');
+        fd.append('temperature', '0');
+
+        var stt = await groqFetch(GROQ_STT_URL, {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + apiKey }, // بدون Content-Type: المتصفح يضبطه مع FormData
+          body: fd
+        }, runCtrl, GROQ_TIMEOUT_MS);
+
+        var transcript = str(stt && stt.text);
+        if (!transcript) throw fail('لم يتمكن Groq من استخراج نص من الصوت (قد يكون صامتاً).');
+        guard(runCtrl);
+
+        // الخطوة ب: تلخيص النص إلى JSON
+        var styleHint = STYLE_HINTS[styleSelect.value] || '';
+        var chat = await groqFetch(GROQ_CHAT_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + apiKey,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: GROQ_CHAT_MODEL,
+            messages: [
+              { role: 'system', content: GROQ_SYSTEM_PROMPT + '\n' + styleHint },
+              { role: 'user', content: 'النص المفرَّغ:\n' + transcript }
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.2
+          })
+        }, runCtrl, GROQ_TIMEOUT_MS);
+
+        var content = chat && chat.choices && chat.choices[0] && chat.choices[0].message && chat.choices[0].message.content;
+        if (!content) throw fail('لم يُرجع Groq أي نتيجة. حاول مرة أخرى.');
+
+        var parsed;
+        try {
+          parsed = parseModelJson(String(content));
+        } catch (e) {
+          throw fail('تعذّر قراءة رد Groq. حاول مرة أخرى.', e && e.message);
+        }
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          throw fail('رد Groq غير مفهوم. حاول مرة أخرى.');
+        }
+        parsed.full_transcript = transcript;
+        return normalizeResult(parsed);
+      }
+
+      // نجاح أي طبقة: حفظ النتيجة في السجل وعرضها
+      async function completeSuccess(result, myAbort) {
+        setStage(3);
+        await delay(500, myAbort);
+
+        finishProcessing();
+
+        var item = addToHistory(result);
+        openItem(item.id);
+        showToast('تم التلخيص بنجاح');
+      }
+
+      // الدرع الثلاثي: Gemini 3.8 ← Gemini 3.5 Lite ← Groq. شاشة التحميل تبقى مفتوحة بين الطبقات
       async function runRequest(myAbort) {
-        var apiKey = getKey();
+        var geminiKey = getKey();
+        var groqKey = getGroqKey();
         var data = payload;
         var lastErr = null;
+        var layersTried = 0;
+        var geminiLayers = geminiKey ? MODELS.length : 0; // بلا مفتاح Gemini نقفز مباشرة إلى Groq
 
-        for (var m = 0; m < MODELS.length; m++) {
+        // الطبقتان 1 و 2: نماذج Gemini
+        for (var m = 0; m < geminiLayers; m++) {
           var isFallback = m > 0;
           var netRetried = false;
           var moveOn = false;
+          layersTried++;
 
           while (!moveOn) {
             try {
-              var result = await attemptGemini(apiKey, data, myAbort, MODELS[m], isFallback);
+              var result = await attemptGemini(geminiKey, data, myAbort, MODELS[m], isFallback);
               if (myAbort.signal.aborted) return;
-
-              setStage(3);
-              await delay(500, myAbort);
-
-              finishProcessing();
-
-              // حفظ النتيجة في السجل المحلي ثم عرضها في مساحة العمل
-              var item = addToHistory(result);
-              openItem(item.id);
-              showToast('تم التلخيص بنجاح');
+              await completeSuccess(result, myAbort);
               return;
             } catch (err) {
               if (myAbort.signal.aborted) return;
               console.error('Model ' + MODELS[m] + ' failed:', err);
               lastErr = err;
 
-              if (err && err.fallback) {
-                moveOn = true; // 503 / 429 / مهلة: ننتقل للنموذج التالي
-              } else if (!(err && err.retryable)) {
-                // خطأ نهائي (مفتاح خاطئ، صوت تالف...)
-                if (m === 0) {
-                  finishProcessing();
-                  showToast(describeError(err), ERROR_TOAST_MS);
-                  return;
-                }
-                showErrorView(err.message || 'حدث خطأ غير متوقع.', err.detail);
-                return;
-              } else if (!netRetried) {
+              if (err && err.retryable && !err.fallback && !netRetried) {
                 // انقطاع شبكة: إعادة محاولة واحدة لنفس النموذج
                 netRetried = true;
                 loadingText.textContent = 'حدث خطأ في الاتصال، جاري إعادة المحاولة...';
@@ -1116,25 +1286,51 @@
                   return;
                 }
               } else {
-                moveOn = true;
+                moveOn = true; // أي فشل آخر: ننتقل للطبقة التالية بصمت
               }
             }
           }
 
-          if (m < MODELS.length - 1) {
-            loadingText.textContent = FALLBACK_TEXT;
+          if (m < geminiLayers - 1) loadingText.textContent = FALLBACK_TEXT;
+        }
+
+        // الطبقة 3 (السرية): Groq، إذا وُجد مفتاحه
+        if (groqKey) {
+          layersTried++;
+          loadingText.textContent = GROQ_TEXT;
+          clearStageTimer();
+          try {
+            var groqResult = await summarizeWithGroq(data.blob, groqKey, myAbort, data.mime);
+            if (myAbort.signal.aborted) return;
+            await completeSuccess(groqResult, myAbort);
+            return;
+          } catch (err) {
+            if (myAbort.signal.aborted) return;
+            console.error('Groq failed:', err);
+            lastErr = err;
           }
         }
 
-        showErrorView(lastErr.message, lastErr.detail);
+        if (!lastErr) {
+          finishProcessing();
+          showToast('يرجى إدخال مفتاح Gemini أو Groq أولاً: افتح الإعدادات (زر الترس)');
+          return;
+        }
+
+        // فشلت كل الطبقات: خطأ نهائي واحد فقط يُعرض (مع زر إعادة المحاولة)
+        if (layersTried === 1 && !lastErr.retryable && !lastErr.fallback) {
+          finishProcessing(); // خطأ حاسم من طبقة وحيدة (مفتاح خاطئ، صوت تالف...): رسالة عابرة كما سبق
+          showToast(describeError(lastErr), ERROR_TOAST_MS);
+          return;
+        }
+        showErrorView(lastErr.message || 'حدث خطأ غير متوقع.', lastErr.detail);
       }
 
       async function summarize(blob, mime) {
         if (isProcessing) return;
 
-        var apiKey = getKey();
-        if (!apiKey) {
-          showToast('يرجى إدخال مفتاح Gemini أولاً: افتح الإعدادات (زر الترس)');
+        if (!getKey() && !getGroqKey()) {
+          showToast('يرجى إدخال مفتاح Gemini أو Groq أولاً: افتح الإعدادات (زر الترس)');
           return;
         }
         if (!blob || !blob.size) { showToast('لا يوجد صوت لتلخيصه'); return; }
@@ -1157,10 +1353,9 @@
           }
 
           var base64 = await blobToBase64(sendBlob);
-          sendBlob = null;
           guard(myAbort);
 
-          payload = { base64: base64, mime: sendMime };
+          payload = { base64: base64, mime: sendMime, blob: sendBlob }; // blob يُستخدم لطبقة Groq
         } catch (err) {
           if (myAbort.signal.aborted) return;
           finishProcessing();
