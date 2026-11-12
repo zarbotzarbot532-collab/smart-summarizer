@@ -759,7 +759,7 @@
 
       /* ====== محرك Gemini ====== */
       // نظام الاحتياط الصامت: تُجرَّب النماذج بالترتيب
-      var MODELS = ['gemini-3.8-flash', 'gemini-1.5-flash'];
+      var MODELS = ['gemini-3.8-flash', 'gemini-2.0-flash'];
       var ATTEMPT_TIMEOUT_MS = 45000;          // مهلة كل نموذج
       var FALLBACK_STATUSES = [503, 429];      // أخطاء تنقلنا للنموذج التالي بصمت
       var FALLBACK_TEXT = 'الخوادم مزدحمة، جاري استخدام النموذج الاحتياطي...';
