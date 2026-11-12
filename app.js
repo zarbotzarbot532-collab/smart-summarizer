@@ -985,36 +985,36 @@ function geminiUrl(model) {
         return { text: text, finishReason: candidate.finishReason };
       }
 
-      async function callGemini(apiKey, base64, mime, signal) {
-        var styleHint = STYLE_HINTS[styleSelect.value] || '';
-        var body = {
-          contents: [{
-            parts: [
-              { text: PROMPT_BASE + '\n' + styleHint + '\n' + PROMPT_EXTRA },
-              { inline_data: { mime_type: mime, data: base64 } }
-            ]
-          }],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            responseSchema: RESPONSE_SCHEMA,
-            temperature: 0.2
-          }
-        };
+      async function callGemini(apiKey, base64, mime, signal, model) {
+  var styleHint = STYLE_HINTS[styleSelect.value] || '';
+  var body = {
+    contents: [{
+      parts: [
+        { text: PROMPT_BASE + '\n' + styleHint + '\n' + PROMPT_EXTRA },
+        { inline_data: { mime_type: mime, data: base64 } }
+      ]
+    }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: RESPONSE_SCHEMA,
+      temperature: 0.2
+    }
+  };
 
-        var data = await postGemini(apiKey, body, signal);
-        var out = readCandidate(data);
+  var data = await postGemini(apiKey, body, signal, model);
+  var out = readCandidate(data);
 
-        var parsed;
-        try {
-          parsed = parseModelJson(out.text);
-        } catch (e) {
-          if (out.finishReason === 'MAX_TOKENS') {
-            throw fail('الرد طويل جداً ولم يكتمل. جرّب تسجيلاً أقصر.', 'finishReason: MAX_TOKENS');
-          }
-          throw fail('تعذّر قراءة رد الذكاء الاصطناعي. حاول مرة أخرى.', e && e.message);
-        }
+  var parsed;
+  try {
+    parsed = parseModelJson(out.text);
+  } catch (e) {
+    if (out.finishReason === 'MAX_TOKENS') {
+      throw fail('الرد طويل جداً ولم يكتمل. جرّب تسجيلاً أقصر.', 'finishReason: MAX_TOKENS');
+    }
+    throw fail('تعذّر قراءة رد الذكاء الاصطناعي. حاول مرة أخرى.', e && e.message);
+  }
 
-        return normalizeResult(parsed);
+  return normalizeResult(parsed);
       }
 
       async function attemptGemini(apiKey, data, runCtrl) {
