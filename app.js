@@ -922,43 +922,46 @@ function geminiUrl(model) {
       }
 
       // إرسال طلب إلى Gemini وإرجاع JSON الرد (مشترك بين التلخيص والشات)
-      async function postGemini(apiKey, body, signal) {
-        var res;
-        try {
-          // المفتاح يُرسل في الترويسة x-goog-api-key (وليس في الرابط)
-          res = await fetch(GEMINI_URL, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-goog-api-key': apiKey
-            },
-            body: JSON.stringify(body),
-            signal: signal
-          });
-        } catch (e) {
-          if (e && e.name === 'AbortError') throw e;
-          throw fail('تعذّر الاتصال بخوادم Google. تحقق من اتصالك بالإنترنت.', e && e.message, true);
-        }
+        async function postGemini(apiKey, body, signal, model) {
+  var res;
+  try {
+    // المفتاح يُرسل في الترويسة x-goog-api-key (وليس في الرابط)
+    res = await fetch(geminiUrl(model || MODELS[0]), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey
+      },
+      body: JSON.stringify(body),
+      signal: signal
+    });
+  } catch (e) {
+    if (e && e.name === 'AbortError') throw e;
+    throw fail('تعذّر الاتصال بخوادم Google. تحقق من اتصالك بالإنترنت.', e && e.message, true);
+  }
 
-        if (!res.ok) {
-          var errData = null;
-          try { errData = await res.json(); } catch (e) {}
-          var apiMsg = errData && errData.error && errData.error.message;
-          console.error('Gemini HTTP error:', res.status, apiMsg || '(بلا رسالة)');
-          throw fail(
-            httpErrorMessage(res.status, apiMsg),
-            'HTTP ' + res.status + (apiMsg ? ': ' + apiMsg : ''),
-            res.status >= 500 || res.status === 408
-          );
-        }
+  if (!res.ok) {
+    var errData = null;
+    try { errData = await res.json(); } catch (e) {}
+    var apiMsg = errData && errData.error && errData.error.message;
+    console.error('Gemini HTTP error (' + (model || MODELS[0]) + '):', res.status, apiMsg || '(بلا رسالة)');
+    var httpErr = fail(
+      httpErrorMessage(res.status, apiMsg),
+      'HTTP ' + res.status + (apiMsg ? ': ' + apiMsg : ''),
+      res.status >= 500 || res.status === 408
+    );
+    // 503 أو 429: يُنتقل للنموذج الاحتياطي بصمت
+    if (FALLBACK_STATUSES.indexOf(res.status) !== -1) httpErr.fallback = true;
+    throw httpErr;
+  }
 
-        try {
-          return await res.json();
-        } catch (e) {
-          if (e && e.name === 'AbortError') throw e;
-          throw fail('انقطع الاتصال أثناء استلام الرد.', e && e.message, true);
-        }
-      }
+  try {
+    return await res.json();
+  } catch (e) {
+    if (e && e.name === 'AbortError') throw e;
+    throw fail('انقطع الاتصال أثناء استلام الرد.', e && e.message, true);
+  }
+}
 
       // استخراج نص أول مرشّح من رد Gemini
       function readCandidate(data) {
