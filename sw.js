@@ -1,58 +1,38 @@
-'use strict';
+/* Service Worker — شبكة أولاً للملفات الأساسية (حتى لا تعلق نسخة قديمة)، ثم الكاش عند انقطاع الإنترنت */
+var CACHE_NAME = 'mulakhkhisi-v9';
+var CORE_ASSETS = ['./', './index.html', './app.js', './manifest.json'];
 
-const CACHE_NAME = 'mulakhkhisi-v16';
-
-// الملفات الأساسية التي تُخزَّن عند التثبيت
-const CORE_ASSETS = [
-  './',
-  './index.html',
-  './manifest.json'
-];
-
-// التثبيت: تخزين الملفات الأساسية
-self.addEventListener('install', (event) => {
+self.addEventListener('install', function (event) {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(CORE_ASSETS))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then(function (c) { return c.addAll(CORE_ASSETS); }).then(function () { return self.skipWaiting(); })
   );
 });
 
-// التفعيل: حذف الكاش القديم
-self.addEventListener('activate', (event) => {
+self.addEventListener('activate', function (event) {
   event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-      ))
-      .then(() => self.clients.claim())
+    caches.keys().then(function (keys) {
+      return Promise.all(keys.filter(function (k) { return k !== CACHE_NAME; }).map(function (k) { return caches.delete(k); }));
+    }).then(function () { return self.clients.claim(); })
   );
 });
 
-// الجلب: Cache-first مع تخزين تلقائي لما يُجلب من الشبكة (بما فيها ملفات CDN)
-self.addEventListener('fetch', (event) => {
-  const req = event.request;
-
-  if (req.method !== 'GET' || !req.url.startsWith('http')) return;
+self.addEventListener('fetch', function (event) {
+  var req = event.request;
+  if (req.method !== 'GET') return;
+  var url = new URL(req.url);
+  if (url.hostname === 'generativelanguage.googleapis.com') return; // لا نخزّن طلبات الذكاء الاصطناعي
 
   event.respondWith(
-    caches.match(req).then((cached) => {
-      if (cached) return cached;
-
-      return fetch(req)
-        .then((res) => {
-          if (res && (res.ok || res.type === 'opaque')) {
-            const copy = res.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
-          }
-          return res;
-        })
-        .catch(() => {
-          if (req.mode === 'navigate') {
-            return caches.match('./index.html');
-          }
-          return Response.error();
-        });
+    fetch(req).then(function (res) {
+      if (res && (res.ok || res.type === 'opaque')) {
+        var copy = res.clone();
+        caches.open(CACHE_NAME).then(function (c) { c.put(req, copy); });
+      }
+      return res;
+    }).catch(function () {
+      return caches.match(req).then(function (hit) {
+        return hit || (req.mode === 'navigate' ? caches.match('./index.html') : Response.error());
+      });
     })
   );
 });
