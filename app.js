@@ -1,0 +1,2139 @@
+    (function () {
+      'use strict';
+
+      var $ = function (id) { return document.getElementById(id); };
+
+      /* ====== عناصر الواجهة العامة ====== */
+      var menuBtn = $('menuBtn');
+      var closeSidebarBtn = $('closeSidebarBtn');
+      var sidebar = $('sidebar');
+      var overlay = $('overlay');
+      var themeBtn = $('themeBtn');
+      var settingsBtn = $('settingsBtn');
+      var settingsModal = $('settingsModal');
+      var closeModalBtn = $('closeModalBtn');
+      var toast = $('toast');
+      var themeMeta = document.querySelector('meta[name="theme-color"]');
+      var toastTimer = null;
+      var BASE_TITLE = document.title;
+
+      /* ====== عناصر الإعدادات ====== */
+      var keyBadge = $('keyBadge');
+      var keyBadgeText = $('keyBadgeText');
+      var keyForm = $('keyForm');
+      var apiKeyInput = $('apiKeyInput');
+      var toggleKeyBtn = $('toggleKeyBtn');
+      var toggleKeyIcon = $('toggleKeyIcon');
+      var keyStatus = $('keyStatus');
+      var deleteKeyBtn = $('deleteKeyBtn');
+
+      /* ====== عناصر الاستقبال ====== */
+      var homeView = $('homeView');
+      var styleSelect = $('styleSelect');
+      var recordBtn = $('recordBtn');
+      var recordIcon = $('recordIcon');
+      var pulseRing = $('pulseRing');
+      var timerEl = $('timer');
+      var recordStatus = $('recordStatus');
+      var recordResult = $('recordResult');
+      var audioPreview = $('audioPreview');
+      var summarizeRecordBtn = $('summarizeRecordBtn');
+      var discardRecordBtn = $('discardRecordBtn');
+      var dropZone = $('dropZone');
+      var fileInput = $('fileInput');
+      var fileInfoWrap = $('fileInfoWrap');
+      var fileNameEl = $('fileName');
+      var fileSizeEl = $('fileSize');
+      var removeFileBtn = $('removeFileBtn');
+      var summarizeFileBtn = $('summarizeFileBtn');
+
+      /* ====== عناصر التحميل ====== */
+      var loadingScreen = $('loadingScreen');
+      var loadingBusy = $('loadingBusy');
+      var loadingError = $('loadingError');
+      var loadingText = $('loadingText');
+      var loadingElapsed = $('loadingElapsed');
+      var errorText = $('errorText');
+      var errorDetail = $('errorDetail');
+      var retryBtn = $('retryBtn');
+      var cancelLoadingBtn = $('cancelLoadingBtn');
+      var segs = Array.prototype.slice.call(document.querySelectorAll('[data-seg]'));
+
+      /* ====== عناصر مساحة العمل والسجل ====== */
+      var workspaceView = $('workspaceView');
+      var backBtn = $('backBtn');
+      var titleInput = $('titleInput');
+      var summaryDate = $('summaryDate');
+      var copyBtn = $('copyBtn');
+      var exportMdBtn = $('exportMdBtn');
+      var exportPdfBtn = $('exportPdfBtn');
+      var tabBtns = Array.prototype.slice.call(document.querySelectorAll('[data-tab]'));
+      var panels = Array.prototype.slice.call(document.querySelectorAll('[data-panel]'));
+      var panelSummary = $('panel-summary');
+      var panelTranscript = $('panel-transcript');
+      var tasksList = $('tasksList');
+      var taskCounter = $('taskCounter');
+      var taskForm = $('taskForm');
+      var taskInput = $('taskInput');
+      var historyList = $('historyList');
+      var historySearch = $('historySearch');
+      var printArea = $('printArea');
+
+      /* ====== عناصر الشات ====== */
+      var chatMessages = $('chatMessages');
+      var chatForm = $('chatForm');
+      var chatInput = $('chatInput');
+      var chatSendBtn = $('chatSendBtn');
+      var chatClearBtn = $('chatClearBtn');
+
+      /* ====== أدوات صغيرة ====== */
+      function showEl(node, display) { node.classList.remove('hidden'); node.classList.add(display); }
+      function hideEl(node, display) { node.classList.add('hidden'); node.classList.remove(display); }
+
+      /* ====== التنبيه (Toast) ====== */
+      function showToast(message, duration) {
+        toast.textContent = message; // textContent: آمن من XSS
+        toast.classList.remove('opacity-0', 'translate-y-4');
+        toast.classList.add('opacity-100', 'translate-y-0');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () {
+          toast.classList.remove('opacity-100', 'translate-y-0');
+          toast.classList.add('opacity-0', 'translate-y-4');
+        }, duration || 3500);
+      }
+
+      /* ====== القائمة الجانبية ====== */
+      function isSidebarOpen() { return !sidebar.classList.contains('translate-x-full'); }
+
+      function openSidebar() {
+        sidebar.classList.remove('translate-x-full', 'invisible');
+        sidebar.setAttribute('aria-hidden', 'false');
+        overlay.classList.remove('opacity-0', 'pointer-events-none');
+        overlay.classList.add('opacity-100');
+        menuBtn.setAttribute('aria-expanded', 'true');
+        document.body.classList.add('overflow-hidden');
+        closeSidebarBtn.focus();
+      }
+
+      function closeSidebar() {
+        sidebar.classList.add('translate-x-full', 'invisible');
+        sidebar.setAttribute('aria-hidden', 'true');
+        overlay.classList.add('opacity-0', 'pointer-events-none');
+        overlay.classList.remove('opacity-100');
+        menuBtn.setAttribute('aria-expanded', 'false');
+        document.body.classList.remove('overflow-hidden');
+        menuBtn.focus();
+      }
+
+      /* ====== نافذة الإعدادات ====== */
+      function isModalOpen() { return !settingsModal.classList.contains('hidden'); }
+
+      function openModal() {
+        updateKeyUI();
+        settingsModal.classList.remove('hidden');
+        settingsModal.classList.add('flex');
+        document.body.classList.add('overflow-hidden');
+        closeModalBtn.focus();
+      }
+
+      function closeModal() {
+        settingsModal.classList.add('hidden');
+        settingsModal.classList.remove('flex');
+        document.body.classList.remove('overflow-hidden');
+        apiKeyInput.value = '';
+        setKeyVisible(false);
+        settingsBtn.focus();
+      }
+
+      /* ====== الوضع الليلي / النهاري ====== */
+      function syncThemeColor() {
+        var isDark = document.documentElement.classList.contains('dark');
+        if (themeMeta) themeMeta.setAttribute('content', isDark ? '#1E293B' : '#4F46E5');
+      }
+
+      function toggleTheme() {
+        var isDark = document.documentElement.classList.toggle('dark');
+        try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch (e) {}
+        syncThemeColor();
+        showToast(isDark ? 'تم تفعيل الوضع الليلي' : 'تم تفعيل الوضع النهاري');
+      }
+
+      /* ====== مفتاح Gemini ====== */
+      var KEY_STORAGE = 'gemini_api_key';
+      // يقبل: AIzaSy... (30 حرفاً فأكثر) و AQ.... (25 حرفاً فأكثر)
+      var KEY_PATTERN = /^(AIzaSy[A-Za-z0-9_\-]{24,}|AQ\.[A-Za-z0-9_\-.]{22,})$/;
+      var BADGE_OK = ['bg-green-100', 'text-green-700', 'dark:bg-green-900/40', 'dark:text-green-400'];
+      var BADGE_BAD = ['bg-red-100', 'text-red-700', 'dark:bg-red-900/40', 'dark:text-red-400'];
+
+      function getKey() {
+        try { return localStorage.getItem(KEY_STORAGE) || ''; } catch (e) { return ''; }
+      }
+
+      function updateKeyUI() {
+        var key = getKey();
+        var has = key.length > 0;
+
+        BADGE_OK.forEach(function (c) { keyBadge.classList.toggle(c, has); });
+        BADGE_BAD.forEach(function (c) { keyBadge.classList.toggle(c, !has); });
+        keyBadgeText.textContent = has ? 'متصل' : 'يرجى إدخال المفتاح';
+
+        keyStatus.textContent = has
+          ? 'يوجد مفتاح محفوظ (ينتهي بـ ' + key.slice(-4) + '). أدخل مفتاحاً جديداً لاستبداله.'
+          : 'لا يوجد مفتاح محفوظ حالياً.';
+        deleteKeyBtn.classList.toggle('hidden', !has);
+      }
+
+      function setKeyVisible(visible) {
+        apiKeyInput.type = visible ? 'text' : 'password';
+        toggleKeyIcon.classList.toggle('fa-eye', !visible);
+        toggleKeyIcon.classList.toggle('fa-eye-slash', visible);
+        toggleKeyBtn.setAttribute('aria-label', visible ? 'إخفاء المفتاح' : 'إظهار المفتاح');
+      }
+
+      toggleKeyBtn.addEventListener('click', function () {
+        setKeyVisible(apiKeyInput.type === 'password');
+      });
+
+      keyForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var value = apiKeyInput.value.trim();
+
+        if (!value) { showToast('أدخل مفتاح Gemini أولاً'); return; }
+        if (!KEY_PATTERN.test(value)) { showToast('صيغة المفتاح غير صحيحة، تأكد من نسخه كاملاً'); return; }
+
+        try {
+          localStorage.setItem(KEY_STORAGE, value);
+        } catch (err) {
+          showToast('تعذّر حفظ المفتاح (التخزين المحلي معطّل في المتصفح)');
+          return;
+        }
+        updateKeyUI();
+        closeModal();
+        showToast('تم حفظ المفتاح بنجاح');
+      });
+
+      deleteKeyBtn.addEventListener('click', function () {
+        try { localStorage.removeItem(KEY_STORAGE); } catch (e) {}
+        apiKeyInput.value = '';
+        updateKeyUI();
+        showToast('تم حذف المفتاح');
+      });
+
+      keyBadge.addEventListener('click', openModal);
+
+      /* ====== نمط التلخيص ====== */
+      var STYLE_HINTS = {
+        detailed: 'نمط التلخيص المطلوب: مفصّل ومناسب للطلبة؛ اشرح الأفكار بوضوح ووسّع النقاط الرئيسية.',
+        meeting: 'نمط التلخيص المطلوب: مختصر ومناسب للاجتماعات؛ ركّز على القرارات والمهام.',
+        bullets: 'نمط التلخيص المطلوب: نقاط سريعة؛ اجعل كل نقطة جملة قصيرة ومباشرة.'
+      };
+
+      (function restoreStyle() {
+        try {
+          var saved = localStorage.getItem('summaryStyle');
+          if (!saved) return;
+          for (var i = 0; i < styleSelect.options.length; i++) {
+            if (styleSelect.options[i].value === saved) { styleSelect.selectedIndex = i; break; }
+          }
+        } catch (e) {}
+      })();
+
+      styleSelect.addEventListener('change', function () {
+        try { localStorage.setItem('summaryStyle', styleSelect.value); } catch (e) {}
+      });
+
+      /* ====== التسجيل المباشر (MediaRecorder) ====== */
+      var stream = null;
+      var recorder = null;
+      var chunks = [];
+      var recordedBlob = null;
+      var recordedSeconds = 0;
+      var audioUrl = null;
+      var isStarting = false;
+      var isRecording = false;
+      var timerInterval = null;
+      var startTime = 0;
+
+      function pad(n) { return n < 10 ? '0' + n : String(n); }
+
+      function formatTime(totalSeconds) {
+        return pad(Math.floor(totalSeconds / 60)) + ':' + pad(totalSeconds % 60);
+      }
+
+      function updateTimer() {
+        timerEl.textContent = formatTime(Math.floor((Date.now() - startTime) / 1000));
+      }
+
+      function startTimer() {
+        startTime = Date.now();
+        timerEl.textContent = '00:00';
+        timerEl.classList.remove('hidden', 'text-slate-500', 'dark:text-slate-300');
+        timerEl.classList.add('text-red-500');
+        clearInterval(timerInterval);
+        timerInterval = setInterval(updateTimer, 250);
+      }
+
+      function stopTimer() {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        updateTimer();
+        timerEl.classList.remove('text-red-500');
+        timerEl.classList.add('text-slate-500', 'dark:text-slate-300');
+      }
+
+      function setRecordingUI(active) {
+        isRecording = active;
+        if (active) {
+          recordBtn.classList.remove('bg-brand', 'hover:bg-brand-700');
+          recordBtn.classList.add('bg-red-600', 'hover:bg-red-700');
+          recordIcon.classList.remove('fa-microphone');
+          recordIcon.classList.add('fa-stop');
+          pulseRing.classList.remove('hidden');
+          recordBtn.setAttribute('aria-label', 'إيقاف التسجيل');
+          recordStatus.textContent = 'جارٍ التسجيل... اضغط للإيقاف';
+        } else {
+          recordBtn.classList.add('bg-brand', 'hover:bg-brand-700');
+          recordBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+          recordIcon.classList.add('fa-microphone');
+          recordIcon.classList.remove('fa-stop');
+          pulseRing.classList.add('hidden');
+          recordBtn.setAttribute('aria-label', 'بدء التسجيل');
+        }
+      }
+
+      function releaseStream() {
+        if (stream) {
+          stream.getTracks().forEach(function (t) { t.stop(); });
+          stream = null;
+        }
+      }
+
+      function clearRecording() {
+        if (audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          audioUrl = null;
+        }
+        recordedBlob = null;
+        recordedSeconds = 0;
+        audioPreview.removeAttribute('src');
+        audioPreview.load();
+        recordResult.classList.add('hidden');
+      }
+
+      function pickMimeType() {
+        var candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+        for (var i = 0; i < candidates.length; i++) {
+          if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(candidates[i])) return candidates[i];
+        }
+        return '';
+      }
+
+      function micErrorMessage(err) {
+        var name = err && err.name;
+        if (name === 'NotAllowedError' || name === 'SecurityError') return 'تم رفض إذن الميكروفون. فعّله من إعدادات المتصفح.';
+        if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'لم يتم العثور على ميكروفون في جهازك.';
+        if (name === 'NotReadableError') return 'الميكروفون مستخدم من تطبيق آخر.';
+        return 'تعذّر بدء التسجيل.';
+      }
+
+      function resetRecordUI() {
+        setRecordingUI(false);
+        recordStatus.textContent = 'اضغط على الميكروفون لبدء التسجيل';
+      }
+
+      function onRecorderStop() {
+        var type = (recorder && recorder.mimeType) || 'audio/webm';
+        releaseStream();
+
+        if (!chunks.length) {
+          recordStatus.textContent = 'اضغط على الميكروفون لبدء التسجيل';
+          showToast('التسجيل فارغ، حاول مرة أخرى');
+          return;
+        }
+
+        recordedBlob = new Blob(chunks, { type: type });
+        chunks = [];
+        audioUrl = URL.createObjectURL(recordedBlob);
+        audioPreview.src = audioUrl;
+        recordResult.classList.remove('hidden');
+        recordStatus.textContent = 'تم إيقاف التسجيل. يمكنك المعاينة أو التلخيص';
+      }
+
+      async function startRecording() {
+        if (isStarting || isRecording) return;
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+          showToast('المتصفح لا يدعم التسجيل (يلزم فتح التطبيق عبر HTTPS)');
+          return;
+        }
+
+        isStarting = true;
+        recordBtn.disabled = true;
+
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (err) {
+          showToast(micErrorMessage(err));
+          isStarting = false;
+          recordBtn.disabled = false;
+          return;
+        }
+
+        try {
+          var mime = pickMimeType();
+          recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+        } catch (err) {
+          releaseStream();
+          showToast('تعذّر تهيئة المسجّل الصوتي');
+          isStarting = false;
+          recordBtn.disabled = false;
+          return;
+        }
+
+        chunks = [];
+        clearRecording();
+
+        recorder.addEventListener('dataavailable', function (e) {
+          if (e.data && e.data.size > 0) chunks.push(e.data);
+        });
+        recorder.addEventListener('stop', onRecorderStop);
+        recorder.addEventListener('error', function () {
+          stopTimer();
+          resetRecordUI();
+          releaseStream();
+          showToast('حدث خطأ أثناء التسجيل');
+        });
+
+        recorder.start();
+        setRecordingUI(true);
+        startTimer();
+
+        isStarting = false;
+        recordBtn.disabled = false;
+      }
+
+      function stopRecording() {
+        if (!recorder || recorder.state === 'inactive') return;
+        recordedSeconds = (Date.now() - startTime) / 1000;
+        setRecordingUI(false);
+        stopTimer();
+        recorder.stop();
+      }
+
+      recordBtn.addEventListener('click', function () {
+        if (isRecording) stopRecording();
+        else startRecording();
+      });
+
+      discardRecordBtn.addEventListener('click', function () {
+        clearRecording();
+        timerEl.classList.add('hidden');
+        timerEl.textContent = '00:00';
+        resetRecordUI();
+        showToast('تم حذف التسجيل');
+      });
+
+      window.addEventListener('pagehide', function () {
+        if (recorder && recorder.state !== 'inactive') recorder.stop();
+        releaseStream();
+      });
+
+      /* ====== رفع ملف صوتي ====== */
+      var MAX_SIZE = 10 * 1024 * 1024; // 10 ميجابايت
+      var ALLOWED_EXT = ['mp3', 'wav', 'm4a', 'ogg', 'webm'];
+      var EXT_MIME = {
+        mp3: 'audio/mp3',
+        wav: 'audio/wav',
+        m4a: 'audio/mp4',
+        ogg: 'audio/ogg',
+        webm: 'audio/webm'
+      };
+      var selectedFile = null;
+
+      function getExt(name) {
+        var i = name.lastIndexOf('.');
+        return i === -1 ? '' : name.slice(i + 1).toLowerCase();
+      }
+
+      function formatSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+      }
+
+      function clearFile() {
+        selectedFile = null;
+        fileInput.value = '';
+        fileNameEl.textContent = '';
+        fileSizeEl.textContent = '';
+        fileInfoWrap.classList.add('hidden');
+      }
+
+      function handleFile(file) {
+        if (!file) return;
+
+        if (ALLOWED_EXT.indexOf(getExt(file.name)) === -1) {
+          showToast('صيغة غير مدعومة. الصيغ المقبولة: mp3, wav, m4a, ogg, webm');
+          fileInput.value = '';
+          return;
+        }
+        if (file.size > MAX_SIZE) {
+          showToast('حجم الملف كبير. الحد الأقصى 10 ميجابايت');
+          fileInput.value = '';
+          return;
+        }
+        if (file.size === 0) {
+          showToast('الملف فارغ');
+          fileInput.value = '';
+          return;
+        }
+
+        selectedFile = file;
+        fileNameEl.textContent = file.name; // textContent: آمن من XSS
+        fileSizeEl.textContent = formatSize(file.size);
+        fileInfoWrap.classList.remove('hidden');
+      }
+
+      fileInput.addEventListener('change', function () {
+        handleFile(fileInput.files && fileInput.files[0]);
+      });
+
+      removeFileBtn.addEventListener('click', clearFile);
+
+      var DRAG_CLASSES = ['border-brand', 'bg-brand-50/60', 'dark:bg-slate-700/50'];
+
+      function setDragState(on) {
+        DRAG_CLASSES.forEach(function (c) { dropZone.classList[on ? 'add' : 'remove'](c); });
+      }
+
+      ['dragenter', 'dragover'].forEach(function (evt) {
+        dropZone.addEventListener(evt, function (e) {
+          e.preventDefault();
+          setDragState(true);
+        });
+      });
+
+      dropZone.addEventListener('dragleave', function (e) {
+        if (!dropZone.contains(e.relatedTarget)) setDragState(false);
+      });
+
+      dropZone.addEventListener('drop', function (e) {
+        e.preventDefault();
+        setDragState(false);
+        var files = e.dataTransfer && e.dataTransfer.files;
+        if (!files || !files.length) return;
+        if (files.length > 1) showToast('سيتم استخدام الملف الأول فقط');
+        handleFile(files[0]);
+      });
+
+      window.addEventListener('dragover', function (e) { e.preventDefault(); });
+      window.addEventListener('drop', function (e) { e.preventDefault(); });
+
+      /* ====== شاشة التحميل: الخطوات والعدّاد ====== */
+      var STAGES = [
+        'جاري تجهيز الصوت...',
+        'جاري إرسال الملف إلى الذكاء الاصطناعي...',
+        'الذكاء الاصطناعي يستمع ويفهم المحتوى...',
+        'جاري تنظيم الملخص والمهام...'
+      ];
+      var STEP_SWITCH_MS = 4000;
+
+      var loadingMode = 'busy'; // 'busy' | 'error'
+      var currentStage = 0;
+      var stageTimer = null;
+      var elapsedInterval = null;
+      var elapsedStart = 0;
+      var wakeLock = null;
+
+      function setStage(index) {
+        currentStage = index;
+        loadingText.textContent = STAGES[index];
+        segs.forEach(function (seg, i) {
+          seg.classList.toggle('bg-white', i <= index);
+          seg.classList.toggle('bg-white/25', i > index);
+        });
+      }
+
+      function clearStageTimer() {
+        clearTimeout(stageTimer);
+        stageTimer = null;
+      }
+
+      function startElapsed() {
+        stopElapsed();
+        elapsedStart = Date.now();
+        loadingElapsed.textContent = '00:00';
+        elapsedInterval = setInterval(function () {
+          loadingElapsed.textContent = formatTime(Math.floor((Date.now() - elapsedStart) / 1000));
+        }, 1000);
+      }
+
+      function stopElapsed() {
+        clearInterval(elapsedInterval);
+        elapsedInterval = null;
+      }
+
+      // منع انطفاء الشاشة أثناء المعالجة (Screen Wake Lock)
+      async function acquireWakeLock() {
+        try {
+          if ('wakeLock' in navigator && !wakeLock) {
+            var lock = await navigator.wakeLock.request('screen');
+            wakeLock = lock;
+            lock.addEventListener('release', function () {
+              if (wakeLock === lock) wakeLock = null;
+            });
+          }
+        } catch (e) { /* غير مدعوم أو مرفوض: نتجاهله */ }
+      }
+
+      function releaseWakeLock() {
+        try { if (wakeLock) wakeLock.release(); } catch (e) {}
+        wakeLock = null;
+      }
+
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible' && isProcessing && loadingMode === 'busy') {
+          acquireWakeLock();
+        }
+      });
+
+      function showBusyView() {
+        loadingMode = 'busy';
+        showEl(loadingBusy, 'flex');
+        hideEl(loadingError, 'flex');
+        hideEl(retryBtn, 'inline-flex');
+        cancelLoadingBtn.textContent = 'إلغاء';
+      }
+
+      function showErrorView(message, detail) {
+        loadingMode = 'error';
+        clearStageTimer();
+        stopElapsed();
+        releaseWakeLock();
+        errorText.textContent = message;
+        errorDetail.textContent = detail || '';
+        hideEl(loadingBusy, 'flex');
+        showEl(loadingError, 'flex');
+        showEl(retryBtn, 'inline-flex');
+        cancelLoadingBtn.textContent = 'إغلاق';
+        retryBtn.focus();
+      }
+
+      function openLoading() {
+        showBusyView();
+        setStage(0);
+        showEl(loadingScreen, 'flex');
+        document.body.classList.add('overflow-hidden');
+        startElapsed();
+        acquireWakeLock();
+        cancelLoadingBtn.focus();
+      }
+
+      function closeLoading() {
+        clearStageTimer();
+        stopElapsed();
+        releaseWakeLock();
+        hideEl(loadingScreen, 'flex');
+        document.body.classList.remove('overflow-hidden');
+      }
+
+      function isLoading() { return !loadingScreen.classList.contains('hidden'); }
+
+      /* ====== تحويل الصوت إلى WAV (16000 هرتز، Mono) ====== */
+      var WAV_RATE = 16000;
+      var MAX_WAV_BYTES = 14 * 1024 * 1024; // نحو 7 دقائق
+      var MAX_WAV_SECONDS = Math.floor((MAX_WAV_BYTES - 44) / (WAV_RATE * 2));
+
+      // true = تحويل كل الملفات إلى WAV، false = تحويل webm و m4a والتسجيلات فقط
+      var ALWAYS_CONVERT_TO_WAV = false;
+      var CONVERT_MIMES = ['audio/webm', 'video/webm', 'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'video/mp4'];
+
+      function needsConversion(mime) {
+        return ALWAYS_CONVERT_TO_WAV || CONVERT_MIMES.indexOf(mime) !== -1;
+      }
+
+      function decodeAudio(ctx, arrayBuffer) {
+        return new Promise(function (resolve, reject) {
+          ctx.decodeAudioData(arrayBuffer, resolve, reject);
+        });
+      }
+
+      function closeAudioCtx(ctx) {
+        try { if (ctx && ctx.close) ctx.close().catch(function () {}); } catch (e) {}
+      }
+
+      async function resampleToMono16k(decoded) {
+        var OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+        if (!OfflineCtx) throw fail('المتصفح لا يدعم تحويل الصوت إلى WAV.');
+        var frames = Math.ceil(decoded.duration * WAV_RATE);
+        var offline = new OfflineCtx(1, frames, WAV_RATE);
+        var source = offline.createBufferSource();
+        source.buffer = decoded;
+        source.connect(offline.destination);
+        source.start(0);
+        try {
+          return await offline.startRendering();
+        } catch (e) {
+          throw fail('تعذّر تحويل الصوت إلى WAV.', (e && e.message) || 'startRendering failed');
+        }
+      }
+
+      function audioBufferToWav(ab) {
+        var frames = ab.length;
+        var nCh = ab.numberOfChannels;
+        var channels = [];
+        for (var c = 0; c < nCh; c++) channels.push(ab.getChannelData(c));
+
+        var buffer = new ArrayBuffer(44 + frames * 2);
+        var view = new DataView(buffer);
+
+        function writeStr(offset, s) {
+          for (var k = 0; k < s.length; k++) view.setUint8(offset + k, s.charCodeAt(k));
+        }
+
+        writeStr(0, 'RIFF');
+        view.setUint32(4, 36 + frames * 2, true);
+        writeStr(8, 'WAVE');
+        writeStr(12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, WAV_RATE, true);
+        view.setUint32(28, WAV_RATE * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        writeStr(36, 'data');
+        view.setUint32(40, frames * 2, true);
+
+        var pcm = new Int16Array(buffer, 44, frames);
+        for (var i = 0; i < frames; i++) {
+          var sum = 0;
+          for (var j = 0; j < nCh; j++) sum += channels[j][i];
+          var s = sum / nCh;
+          if (s > 1) s = 1; else if (s < -1) s = -1;
+          pcm[i] = s < 0 ? s * 32768 : s * 32767;
+        }
+        return new Blob([buffer], { type: 'audio/wav' });
+      }
+
+      async function convertToWav(blob) {
+        var AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) throw fail('المتصفح لا يدعم تحويل الصوت إلى WAV.');
+
+        var arrayBuffer;
+        try {
+          arrayBuffer = await blob.arrayBuffer();
+        } catch (e) {
+          throw fail('تعذّر قراءة الملف الصوتي');
+        }
+
+        var ctx;
+        try { ctx = new AudioCtx({ sampleRate: WAV_RATE }); } catch (e) { ctx = new AudioCtx(); }
+
+        var decoded;
+        try {
+          decoded = await decodeAudio(ctx, arrayBuffer);
+        } catch (e) {
+          throw fail('تعذّر فك ترميز الصوت. قد تكون الصيغة غير مدعومة في متصفحك أو الملف تالف.',
+            (e && e.message) || 'decodeAudioData failed');
+        } finally {
+          arrayBuffer = null;
+          closeAudioCtx(ctx);
+        }
+
+        if (!decoded.length) throw fail('الصوت فارغ');
+
+        var estimatedFrames = Math.ceil(decoded.duration * WAV_RATE);
+        if (44 + estimatedFrames * 2 > MAX_WAV_BYTES) {
+          throw fail('الصوت طويل جداً بعد التحويل (الحد الأقصى نحو 7 دقائق). جرّب تسجيلاً أقصر.');
+        }
+
+        var finalBuf = decoded;
+        if (decoded.sampleRate !== WAV_RATE) {
+          finalBuf = await resampleToMono16k(decoded);
+        }
+        decoded = null;
+
+        return audioBufferToWav(finalBuf);
+      }
+
+      /* ====== محرك Gemini ====== */
+      var GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent';
+      var REQUEST_TIMEOUT_MS = 180000;
+      var ERROR_TOAST_MS = 9000;
+      var MAX_ATTEMPTS = 2;
+
+      var PROMPT_BASE =
+        'أنت مساعد ذكي. قم بتحليل هذا الملف الصوتي (محاضرة أو اجتماع) وأعد النتيجة بصيغة JSON حصرية تحتوي على المفاتيح التالية: ' +
+        'title (عنوان ذكي)، executive_summary (ملخص في 3 أسطر)، key_points (مصفوفة من النقاط)، ' +
+        'action_items (مصفوفة من المهام كل مهمة تحتوي على task و assignee و deadline)، full_transcript (النص الكامل).';
+
+      var PROMPT_EXTRA =
+        'اكتب كل المحتوى بالعربية الفصحى المبسطة. إذا لم تُذكر مهام فأعد action_items كمصفوفة فارغة، ' +
+        'وإذا لم يُذكر المسؤول أو الموعد لمهمة ما فاكتب "غير محدد".';
+
+      var RESPONSE_SCHEMA = {
+        type: 'OBJECT',
+        properties: {
+          title: { type: 'STRING' },
+          executive_summary: { type: 'STRING' },
+          key_points: { type: 'ARRAY', items: { type: 'STRING' } },
+          action_items: {
+            type: 'ARRAY',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                task: { type: 'STRING' },
+                assignee: { type: 'STRING' },
+                deadline: { type: 'STRING' }
+              },
+              required: ['task', 'assignee', 'deadline']
+            }
+          },
+          full_transcript: { type: 'STRING' }
+        },
+        required: ['title', 'executive_summary', 'key_points', 'action_items', 'full_transcript']
+      };
+
+      var isProcessing = false;
+      var runAbort = null;
+      var payload = null;
+
+      function fail(message, detail, retryable) {
+        var err = new Error(message);
+        err.userFacing = true;
+        if (detail) err.detail = String(detail).slice(0, 400);
+        if (retryable) err.retryable = true;
+        return err;
+      }
+
+      function abortError() {
+        var e = new Error('Aborted');
+        e.name = 'AbortError';
+        return e;
+      }
+
+      function guard(ctrl) {
+        if (ctrl.signal.aborted) throw abortError();
+      }
+
+      function delay(ms, ctrl) {
+        return new Promise(function (resolve, reject) {
+          var t = setTimeout(function () {
+            ctrl.signal.removeEventListener('abort', onAbort);
+            resolve();
+          }, ms);
+          function onAbort() { clearTimeout(t); reject(abortError()); }
+          ctrl.signal.addEventListener('abort', onAbort, { once: true });
+        });
+      }
+
+      function waitForOnline(ctrl, maxMs) {
+        if (navigator.onLine !== false) return Promise.resolve();
+        return new Promise(function (resolve, reject) {
+          var t = setTimeout(finish, maxMs);
+          function cleanup() {
+            clearTimeout(t);
+            window.removeEventListener('online', finish);
+            ctrl.signal.removeEventListener('abort', onAbort);
+          }
+          function finish() { cleanup(); resolve(); }
+          function onAbort() { cleanup(); reject(abortError()); }
+          window.addEventListener('online', finish);
+          ctrl.signal.addEventListener('abort', onAbort, { once: true });
+        });
+      }
+
+      function blobToBase64(blob) {
+        return new Promise(function (resolve, reject) {
+          var reader = new FileReader();
+          reader.onload = function () {
+            var s = String(reader.result);
+            var i = s.indexOf(',');
+            resolve(i === -1 ? '' : s.slice(i + 1));
+          };
+          reader.onerror = function () { reject(fail('تعذّر قراءة الملف الصوتي')); };
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      function baseMime(type) {
+        var t = String(type || '').split(';')[0].trim().toLowerCase();
+        return t || 'audio/webm';
+      }
+
+      function httpErrorMessage(status, apiMsg) {
+        var msg = String(apiMsg || '');
+        if (/API key|API_KEY/i.test(msg) && status !== 429) return 'المفتاح غير صالح. تحقق منه في الإعدادات.';
+        if (/location is not supported/i.test(msg)) return 'خدمة Gemini غير متاحة في منطقتك حالياً.';
+        if (status === 400) {
+          if (/audio|mime|format|unsupported|invalid.*(data|argument)/i.test(msg)) return 'صيغة الصوت غير مدعومة أو الملف تالف.';
+          return 'تعذّر معالجة الطلب.';
+        }
+        if (status === 401 || status === 403) return 'المفتاح غير صالح أو لا يملك صلاحية استخدام هذه الخدمة.';
+        if (status === 404) return 'نموذج الذكاء الاصطناعي غير متاح حالياً.';
+        if (status === 413) return 'حجم الملف كبير جداً على الخدمة.';
+        if (status === 429) return 'تجاوزت حد الاستخدام المجاني. حاول بعد قليل.';
+        if (status >= 500) return 'خوادم Google مشغولة حالياً.';
+        return 'حدث خطأ في الاتصال بالخدمة.';
+      }
+
+      function parseModelJson(text) {
+        var clean = text.trim();
+        clean = clean.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+        return JSON.parse(clean);
+      }
+
+      function str(v) {
+        if (typeof v === 'string') return v.trim();
+        return v === null || v === undefined ? '' : String(v);
+      }
+
+      function normalizeResult(raw) {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+          throw fail('رد الذكاء الاصطناعي غير مفهوم. حاول مرة أخرى.');
+        }
+        var points = Array.isArray(raw.key_points) ? raw.key_points.map(str).filter(Boolean) : [];
+        var items = (Array.isArray(raw.action_items) ? raw.action_items : []).map(function (it) {
+          if (it && typeof it === 'object') {
+            return {
+              task: str(it.task),
+              assignee: str(it.assignee) || 'غير محدد',
+              deadline: str(it.deadline) || 'غير محدد'
+            };
+          }
+          return { task: str(it), assignee: 'غير محدد', deadline: 'غير محدد' };
+        }).filter(function (it) { return it.task; });
+
+        return {
+          title: str(raw.title) || 'ملخص بدون عنوان',
+          executive_summary: str(raw.executive_summary),
+          key_points: points,
+          action_items: items,
+          full_transcript: str(raw.full_transcript)
+        };
+      }
+
+      // إرسال طلب إلى Gemini وإرجاع JSON الرد (مشترك بين التلخيص والشات)
+      async function postGemini(apiKey, body, signal) {
+        var res;
+        try {
+          // المفتاح يُرسل في الترويسة x-goog-api-key (وليس في الرابط)
+          res = await fetch(GEMINI_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': apiKey
+            },
+            body: JSON.stringify(body),
+            signal: signal
+          });
+        } catch (e) {
+          if (e && e.name === 'AbortError') throw e;
+          throw fail('تعذّر الاتصال بخوادم Google. تحقق من اتصالك بالإنترنت.', e && e.message, true);
+        }
+
+        if (!res.ok) {
+          var errData = null;
+          try { errData = await res.json(); } catch (e) {}
+          var apiMsg = errData && errData.error && errData.error.message;
+          console.error('Gemini HTTP error:', res.status, apiMsg || '(بلا رسالة)');
+          throw fail(
+            httpErrorMessage(res.status, apiMsg),
+            'HTTP ' + res.status + (apiMsg ? ': ' + apiMsg : ''),
+            res.status >= 500 || res.status === 408
+          );
+        }
+
+        try {
+          return await res.json();
+        } catch (e) {
+          if (e && e.name === 'AbortError') throw e;
+          throw fail('انقطع الاتصال أثناء استلام الرد.', e && e.message, true);
+        }
+      }
+
+      // استخراج نص أول مرشّح من رد Gemini
+      function readCandidate(data) {
+        if (data.promptFeedback && data.promptFeedback.blockReason) {
+          throw fail('تم حجب الرد من قبل الخدمة.', 'blockReason: ' + data.promptFeedback.blockReason);
+        }
+
+        var candidate = data.candidates && data.candidates[0];
+        if (!candidate) throw fail('لم يُرجع الذكاء الاصطناعي أي نتيجة. حاول مرة أخرى.');
+
+        var parts = (candidate.content && candidate.content.parts) || [];
+        var text = parts
+          .filter(function (p) { return typeof p.text === 'string' && !p.thought; })
+          .map(function (p) { return p.text; })
+          .join('');
+
+        if (!text) {
+          throw fail('لم يُرجع الذكاء الاصطناعي أي نص. حاول مرة أخرى.',
+            candidate.finishReason ? 'finishReason: ' + candidate.finishReason : '');
+        }
+        return { text: text, finishReason: candidate.finishReason };
+      }
+
+      async function callGemini(apiKey, base64, mime, signal) {
+        var styleHint = STYLE_HINTS[styleSelect.value] || '';
+        var body = {
+          contents: [{
+            parts: [
+              { text: PROMPT_BASE + '\n' + styleHint + '\n' + PROMPT_EXTRA },
+              { inline_data: { mime_type: mime, data: base64 } }
+            ]
+          }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: RESPONSE_SCHEMA,
+            temperature: 0.2
+          }
+        };
+
+        var data = await postGemini(apiKey, body, signal);
+        var out = readCandidate(data);
+
+        var parsed;
+        try {
+          parsed = parseModelJson(out.text);
+        } catch (e) {
+          if (out.finishReason === 'MAX_TOKENS') {
+            throw fail('الرد طويل جداً ولم يكتمل. جرّب تسجيلاً أقصر.', 'finishReason: MAX_TOKENS');
+          }
+          throw fail('تعذّر قراءة رد الذكاء الاصطناعي. حاول مرة أخرى.', e && e.message);
+        }
+
+        return normalizeResult(parsed);
+      }
+
+      async function attemptGemini(apiKey, data, runCtrl) {
+        var ctrl = new AbortController();
+        var timedOut = false;
+        function onRunAbort() { ctrl.abort(); }
+        runCtrl.signal.addEventListener('abort', onRunAbort);
+        var timeoutId = setTimeout(function () { timedOut = true; ctrl.abort(); }, REQUEST_TIMEOUT_MS);
+
+        setStage(1);
+        clearStageTimer();
+        stageTimer = setTimeout(function () {
+          if (loadingMode === 'busy' && currentStage === 1) setStage(2);
+        }, STEP_SWITCH_MS);
+
+        try {
+          return await callGemini(apiKey, data.base64, data.mime, ctrl.signal);
+        } catch (e) {
+          if (e && e.name === 'AbortError' && timedOut && !runCtrl.signal.aborted) {
+            throw fail('انتهت مهلة الطلب. الاتصال بطيء أو الملف طويل.',
+              'timeout بعد ' + (REQUEST_TIMEOUT_MS / 1000) + ' ثانية', true);
+          }
+          throw e;
+        } finally {
+          clearTimeout(timeoutId);
+          clearStageTimer();
+          runCtrl.signal.removeEventListener('abort', onRunAbort);
+        }
+      }
+
+      function describeError(err) {
+        console.error('Summarize error:', err);
+        if (err && err.userFacing) return err.message + (err.detail ? '\n' + err.detail : '');
+        return 'حدث خطأ غير متوقع:\n' + ((err && err.name) || 'Error') + ': ' + ((err && err.message) || '');
+      }
+
+      function finishProcessing() {
+        closeLoading();
+        isProcessing = false;
+        payload = null;
+        runAbort = null;
+      }
+
+      async function runRequest(myAbort) {
+        var apiKey = getKey();
+        var data = payload;
+        var lastErr = null;
+
+        for (var attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          try {
+            var result = await attemptGemini(apiKey, data, myAbort);
+            if (myAbort.signal.aborted) return;
+
+            setStage(3);
+            await delay(500, myAbort);
+
+            finishProcessing();
+
+            // حفظ النتيجة في السجل المحلي ثم عرضها في مساحة العمل
+            var item = addToHistory(result);
+            openItem(item.id);
+            showToast('تم التلخيص بنجاح');
+            return;
+          } catch (err) {
+            if (myAbort.signal.aborted) return;
+            console.error('Attempt ' + attempt + ' failed:', err);
+
+            if (!(err && err.retryable)) {
+              finishProcessing();
+              showToast(describeError(err), ERROR_TOAST_MS);
+              return;
+            }
+
+            lastErr = err;
+            if (attempt < MAX_ATTEMPTS) {
+              loadingText.textContent = 'حدث خطأ في الاتصال، جاري إعادة المحاولة...';
+              try {
+                await waitForOnline(myAbort, 15000);
+                await delay(2000, myAbort);
+              } catch (e2) {
+                return;
+              }
+            }
+          }
+        }
+
+        showErrorView(lastErr.message, lastErr.detail);
+      }
+
+      async function summarize(blob, mime) {
+        if (isProcessing) return;
+
+        var apiKey = getKey();
+        if (!apiKey) {
+          showToast('يرجى إدخال مفتاح Gemini أولاً: افتح الإعدادات (زر الترس)');
+          return;
+        }
+        if (!blob || !blob.size) { showToast('لا يوجد صوت لتلخيصه'); return; }
+        if (blob.size > MAX_SIZE) { showToast('حجم الصوت كبير. الحد الأقصى 10 ميجابايت'); return; }
+        if (navigator.onLine === false) { showToast('لا يوجد اتصال بالإنترنت. تحقق من اتصالك ثم حاول مجدداً.'); return; }
+
+        isProcessing = true;
+        var myAbort = new AbortController();
+        runAbort = myAbort;
+        openLoading();
+
+        try {
+          var sendBlob = blob;
+          var sendMime = mime;
+
+          if (needsConversion(mime)) {
+            sendBlob = await convertToWav(blob);
+            sendMime = 'audio/wav';
+            guard(myAbort);
+          }
+
+          var base64 = await blobToBase64(sendBlob);
+          sendBlob = null;
+          guard(myAbort);
+
+          payload = { base64: base64, mime: sendMime };
+        } catch (err) {
+          if (myAbort.signal.aborted) return;
+          finishProcessing();
+          showToast(describeError(err), ERROR_TOAST_MS);
+          return;
+        }
+
+        await runRequest(myAbort);
+      }
+
+      cancelLoadingBtn.addEventListener('click', function () {
+        if (loadingMode === 'busy') {
+          if (runAbort) runAbort.abort();
+          finishProcessing();
+          showToast('تم إلغاء العملية');
+        } else {
+          finishProcessing();
+        }
+      });
+
+      retryBtn.addEventListener('click', function () {
+        if (!isProcessing || !payload) return;
+        var myAbort = new AbortController();
+        runAbort = myAbort;
+        showBusyView();
+        setStage(1);
+        startElapsed();
+        acquireWakeLock();
+        cancelLoadingBtn.focus();
+        runRequest(myAbort);
+      });
+
+      summarizeRecordBtn.addEventListener('click', function () {
+        if (!recordedBlob) { showToast('لا يوجد تسجيل لتلخيصه'); return; }
+        var mime = baseMime(recordedBlob.type);
+        if (needsConversion(mime) && recordedSeconds > MAX_WAV_SECONDS) {
+          showToast('التسجيل طويل جداً للتحويل (الحد الأقصى نحو 7 دقائق). سجّل مقاطع أقصر.');
+          return;
+        }
+        summarize(recordedBlob, mime);
+      });
+
+      summarizeFileBtn.addEventListener('click', function () {
+        if (!selectedFile) { showToast('اختر ملفاً أولاً'); return; }
+        summarize(selectedFile, EXT_MIME[getExt(selectedFile.name)] || baseMime(selectedFile.type));
+      });
+
+      /* ====== أدوات بناء العناصر (textContent فقط) ====== */
+      function el(tag, className, text) {
+        var node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined && text !== null) node.textContent = text;
+        return node;
+      }
+
+      var CARD = 'rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm p-5';
+      var CARD_TITLE = 'flex items-center gap-2 font-bold text-lg mb-3';
+      var ICON_CLASS = 'text-brand dark:text-brand-400';
+
+      function cardTitle(iconClass, text) {
+        var h = el('h3', CARD_TITLE);
+        h.appendChild(el('i', 'fa-solid ' + iconClass + ' ' + ICON_CLASS));
+        h.appendChild(el('span', '', text));
+        return h;
+      }
+
+      function emptyNote(text) {
+        return el('p', 'text-sm text-slate-400 dark:text-slate-500', text);
+      }
+
+      /* ====== السجل المحلي (History) ====== */
+      var HISTORY_KEY = 'summaries_history';
+      var MAX_HISTORY = 100;
+      var MAX_CHAT_MESSAGES = 100;
+      var DEFAULT_TITLE = 'ملخص بدون عنوان';
+
+      var historyItems = [];
+      var currentId = null;
+      var saveTimer = null;
+      var lastSaveFailed = false;
+
+      function genId() {
+        return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      }
+
+      function sanitizeTask(t) {
+        if (!t || typeof t !== 'object') return null;
+        var text = str(t.task);
+        if (!text) return null;
+        return {
+          id: str(t.id) || genId(),
+          task: text,
+          assignee: str(t.assignee),
+          deadline: str(t.deadline),
+          done: t.done === true
+        };
+      }
+
+      function sanitizeChat(arr) {
+        if (!Array.isArray(arr)) return [];
+        return arr.map(function (m) {
+          if (!m || typeof m !== 'object') return null;
+          var role = m.role === 'user' ? 'user' : (m.role === 'ai' ? 'ai' : null);
+          var text = str(m.text);
+          if (!role || !text) return null;
+          return { role: role, text: text, ts: Number(m.ts) || 0 };
+        }).filter(Boolean).slice(-MAX_CHAT_MESSAGES);
+      }
+
+      function sanitizeItem(raw) {
+        if (!raw || typeof raw !== 'object') return null;
+        if (raw.id === undefined || raw.id === null) return null;
+        return {
+          id: raw.id,
+          date: typeof raw.date === 'string' && raw.date ? raw.date : new Date(Number(raw.id) || Date.now()).toISOString(),
+          title: str(raw.title) || DEFAULT_TITLE,
+          executive_summary: str(raw.executive_summary),
+          key_points: Array.isArray(raw.key_points) ? raw.key_points.map(str).filter(Boolean) : [],
+          action_items: (Array.isArray(raw.action_items) ? raw.action_items : []).map(sanitizeTask).filter(Boolean),
+          full_transcript: str(raw.full_transcript),
+          chat: sanitizeChat(raw.chat)
+        };
+      }
+
+      function loadHistory() {
+        try {
+          var raw = localStorage.getItem(HISTORY_KEY);
+          if (!raw) return [];
+          var arr = JSON.parse(raw);
+          if (!Array.isArray(arr)) return [];
+          return arr.map(sanitizeItem).filter(Boolean);
+        } catch (e) {
+          console.warn('تعذّر قراءة السجل:', e);
+          return [];
+        }
+      }
+
+      function saveHistory() {
+        try {
+          localStorage.setItem(HISTORY_KEY, JSON.stringify(historyItems));
+          lastSaveFailed = false;
+          return true;
+        } catch (e) {
+          console.warn('تعذّر حفظ السجل:', e);
+          if (!lastSaveFailed) {
+            showToast('تعذّر حفظ السجل (مساحة التخزين ممتلئة أو معطّلة). احذف بعض الملخصات القديمة.', ERROR_TOAST_MS);
+          }
+          lastSaveFailed = true;
+          return false;
+        }
+      }
+
+      // حفظ مؤجّل قصير (للعنوان أثناء الكتابة)
+      function scheduleSave() {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(function () {
+          saveTimer = null;
+          saveHistory();
+          renderHistory();
+        }, 300);
+      }
+
+      function flushSave() {
+        if (saveTimer) {
+          clearTimeout(saveTimer);
+          saveTimer = null;
+          saveHistory();
+          renderHistory();
+        }
+      }
+
+      function findIndex(id) {
+        for (var i = 0; i < historyItems.length; i++) {
+          if (String(historyItems[i].id) === String(id)) return i;
+        }
+        return -1;
+      }
+
+      function findItem(id) {
+        var i = findIndex(id);
+        return i === -1 ? null : historyItems[i];
+      }
+
+      function getCurrent() {
+        return currentId === null ? null : findItem(currentId);
+      }
+
+      function addToHistory(result) {
+        var id = Date.now();
+        while (findIndex(id) !== -1) id++;
+
+        var item = {
+          id: id,
+          date: new Date().toISOString(),
+          title: result.title,
+          executive_summary: result.executive_summary,
+          key_points: result.key_points.slice(),
+          action_items: result.action_items.map(function (t) {
+            return { id: genId(), task: t.task, assignee: t.assignee, deadline: t.deadline, done: false };
+          }),
+          full_transcript: result.full_transcript,
+          chat: []
+        };
+
+        historyItems.unshift(item);
+        if (historyItems.length > MAX_HISTORY) historyItems.length = MAX_HISTORY;
+        saveHistory();
+        renderHistory();
+        return item;
+      }
+
+      function formatDate(iso) {
+        try {
+          var d = new Date(iso);
+          if (isNaN(d.getTime())) return '';
+          return d.toLocaleString('ar-DZ', {
+            year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+          });
+        } catch (e) {
+          return '';
+        }
+      }
+
+      // تطبيع بسيط للبحث بالعربية (إزالة التشكيل وتوحيد الألف والياء والتاء المربوطة)
+      function normSearch(s) {
+        return String(s).toLowerCase()
+          .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+          .replace(/[أإآ]/g, 'ا')
+          .replace(/ى/g, 'ي')
+          .replace(/ة/g, 'ه');
+      }
+
+      function renderHistory() {
+        var q = normSearch(historySearch.value.trim());
+        var list = historyItems.filter(function (h) {
+          return !q || normSearch(h.title).indexOf(q) !== -1;
+        });
+
+        historyList.replaceChildren();
+
+        if (!historyItems.length || !list.length) {
+          var empty = el('div', 'h-full min-h-[10rem] flex flex-col items-center justify-center text-center text-slate-400 dark:text-slate-500 gap-3');
+          empty.appendChild(el('i', (historyItems.length ? 'fa-solid fa-magnifying-glass' : 'fa-regular fa-folder-open') + ' text-4xl'));
+          empty.appendChild(el('p', 'text-sm', historyItems.length ? 'لا توجد نتائج مطابقة' : 'لا توجد ملخصات بعد'));
+          historyList.appendChild(empty);
+          return;
+        }
+
+        var ul = el('ul', 'space-y-1');
+        list.forEach(function (h) {
+          var active = currentId !== null && String(currentId) === String(h.id);
+          var li = el('li', 'flex items-stretch gap-1 rounded-xl border transition-colors ' +
+            (active
+              ? 'bg-brand-50 border-brand/40 dark:bg-slate-700 dark:border-brand-400/40'
+              : 'border-transparent hover:bg-slate-100 dark:hover:bg-slate-700/60'));
+
+          var openBtn = el('button', 'flex-1 min-w-0 text-right px-3 py-2.5 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand');
+          openBtn.type = 'button';
+          openBtn.setAttribute('data-action', 'open');
+          openBtn.setAttribute('data-id', String(h.id));
+
+          var title = el('span', 'block font-semibold text-sm truncate', h.title);
+          title.setAttribute('dir', 'auto');
+          openBtn.appendChild(title);
+          openBtn.appendChild(el('span', 'block text-xs text-slate-400 dark:text-slate-500 mt-0.5', formatDate(h.date)));
+
+          var delBtn = el('button', 'w-9 shrink-0 rounded-xl flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400');
+          delBtn.type = 'button';
+          delBtn.setAttribute('data-action', 'delete');
+          delBtn.setAttribute('data-id', String(h.id));
+          delBtn.setAttribute('aria-label', 'حذف الملخص');
+          delBtn.appendChild(el('i', 'fa-regular fa-trash-can text-sm'));
+
+          li.appendChild(openBtn);
+          li.appendChild(delBtn);
+          ul.appendChild(li);
+        });
+        historyList.appendChild(ul);
+      }
+
+      function deleteHistoryItem(id) {
+        var idx = findIndex(id);
+        if (idx === -1) return;
+        if (!window.confirm('هل تريد حذف هذا الملخص نهائياً من السجل؟')) return;
+
+        flushSave();
+        historyItems.splice(idx, 1);
+        saveHistory();
+
+        if (currentId !== null && String(currentId) === String(id)) {
+          cancelChat();
+          currentId = null;
+          workspaceView.classList.add('hidden');
+          homeView.classList.remove('hidden');
+        }
+        renderHistory();
+        showToast('تم حذف الملخص');
+      }
+
+      historyList.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        var id = btn.getAttribute('data-id');
+        if (btn.getAttribute('data-action') === 'open') {
+          openItem(id);
+          closeSidebar();
+        } else if (btn.getAttribute('data-action') === 'delete') {
+          deleteHistoryItem(id);
+        }
+      });
+
+      historySearch.addEventListener('input', renderHistory);
+
+      /* ====== مساحة العمل (Workspace) ====== */
+      var TAB_ACTIVE = ['bg-brand', 'text-white', 'shadow'];
+      var TAB_IDLE = ['text-slate-600', 'dark:text-slate-300', 'hover:bg-slate-100', 'dark:hover:bg-slate-700'];
+
+      function selectTab(name) {
+        tabBtns.forEach(function (btn) {
+          var active = btn.getAttribute('data-tab') === name;
+          TAB_ACTIVE.forEach(function (c) { btn.classList.toggle(c, active); });
+          TAB_IDLE.forEach(function (c) { btn.classList.toggle(c, !active); });
+          btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        panels.forEach(function (p) {
+          p.classList.toggle('hidden', p.getAttribute('data-panel') !== name);
+        });
+        if (name === 'chat') scrollChatToBottom();
+      }
+
+      tabBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () { selectTab(btn.getAttribute('data-tab')); });
+      });
+
+      function renderSummary(item) {
+        panelSummary.replaceChildren();
+
+        var c1 = el('div', CARD);
+        c1.appendChild(cardTitle('fa-bolt', 'الملخص التنفيذي'));
+        if (item.executive_summary) {
+          var p = el('p', 'leading-loose whitespace-pre-line', item.executive_summary);
+          p.setAttribute('dir', 'auto');
+          c1.appendChild(p);
+        } else {
+          c1.appendChild(emptyNote('لا يوجد ملخص'));
+        }
+        panelSummary.appendChild(c1);
+
+        var c2 = el('div', CARD);
+        c2.appendChild(cardTitle('fa-list-ul', 'النقاط الرئيسية'));
+        if (item.key_points.length) {
+          var ul = el('ul', 'list-disc ps-5 space-y-2 leading-relaxed marker:text-brand');
+          item.key_points.forEach(function (pt) {
+            var li = el('li', '', pt);
+            li.setAttribute('dir', 'auto');
+            ul.appendChild(li);
+          });
+          c2.appendChild(ul);
+        } else {
+          c2.appendChild(emptyNote('لا توجد نقاط رئيسية'));
+        }
+        panelSummary.appendChild(c2);
+      }
+
+      function renderTranscript(item) {
+        panelTranscript.replaceChildren();
+
+        var card = el('div', CARD);
+        card.appendChild(cardTitle('fa-file-lines', 'النص الكامل'));
+        if (item.full_transcript) {
+          var p = el('p', 'leading-loose whitespace-pre-wrap text-slate-700 dark:text-slate-200', item.full_transcript);
+          p.setAttribute('dir', 'auto');
+          card.appendChild(p);
+        } else {
+          card.appendChild(emptyNote('لا يوجد نص مُفرَّغ'));
+        }
+        panelTranscript.appendChild(card);
+      }
+
+      /* ====== المهام التفاعلية ====== */
+      function knownValue(v) {
+        var s = str(v);
+        return (s && s !== 'غير محدد') ? s : '';
+      }
+
+      function updateTaskCounter() {
+        var item = getCurrent();
+        var total = item ? item.action_items.length : 0;
+        if (!total) {
+          taskCounter.classList.add('hidden');
+          return;
+        }
+        var done = item.action_items.filter(function (t) { return t.done; }).length;
+        taskCounter.textContent = done + ' من ' + total + ' مهام مكتملة';
+        taskCounter.classList.remove('hidden');
+      }
+
+      function buildTaskRow(t) {
+        var card = el('div', 'flex items-start gap-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm p-4 transition-opacity');
+
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.id = 'task-' + t.id;
+        cb.checked = !!t.done;
+        cb.className = 'mt-1 w-5 h-5 shrink-0 accent-brand cursor-pointer';
+        cb.setAttribute('aria-label', 'تحديد المهمة كمكتملة');
+
+        var body = el('label', 'flex-1 min-w-0 cursor-pointer space-y-1.5');
+        body.setAttribute('for', cb.id);
+
+        var text = el('p', 'font-bold leading-relaxed break-words', t.task);
+        text.setAttribute('dir', 'auto');
+        body.appendChild(text);
+
+        var who = knownValue(t.assignee);
+        var when = knownValue(t.deadline);
+        if (who || when) {
+          var meta = el('div', 'flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-500 dark:text-slate-400');
+          if (who) {
+            var w = el('span', 'flex items-center gap-1.5');
+            w.appendChild(el('i', 'fa-regular fa-user text-xs'));
+            w.appendChild(el('span', '', who));
+            meta.appendChild(w);
+          }
+          if (when) {
+            var d = el('span', 'flex items-center gap-1.5');
+            d.appendChild(el('i', 'fa-regular fa-calendar text-xs'));
+            d.appendChild(el('span', '', when));
+            meta.appendChild(d);
+          }
+          body.appendChild(meta);
+        }
+
+        var del = el('button', 'w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400');
+        del.type = 'button';
+        del.setAttribute('aria-label', 'حذف المهمة');
+        del.appendChild(el('i', 'fa-regular fa-trash-can text-sm'));
+
+        function applyDone() {
+          card.classList.toggle('opacity-60', cb.checked);
+          text.classList.toggle('line-through', cb.checked);
+        }
+        applyDone();
+
+        cb.addEventListener('change', function () {
+          t.done = cb.checked;
+          applyDone();
+          saveHistory();
+          updateTaskCounter();
+        });
+
+        del.addEventListener('click', function () { deleteTask(t.id); });
+
+        card.appendChild(cb);
+        card.appendChild(body);
+        card.appendChild(del);
+        return card;
+      }
+
+      function renderTasks(item) {
+        tasksList.replaceChildren();
+
+        if (!item.action_items.length) {
+          var empty = el('div', CARD + ' text-center');
+          empty.appendChild(emptyNote('لا توجد مهام. أضف مهمة جديدة من الحقل أدناه.'));
+          tasksList.appendChild(empty);
+        } else {
+          item.action_items.forEach(function (t) { tasksList.appendChild(buildTaskRow(t)); });
+        }
+        updateTaskCounter();
+      }
+
+      function deleteTask(id) {
+        var item = getCurrent();
+        if (!item) return;
+        item.action_items = item.action_items.filter(function (t) { return t.id !== id; });
+        saveHistory();
+        renderTasks(item);
+      }
+
+      taskForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var item = getCurrent();
+        if (!item) return;
+
+        var value = taskInput.value.trim();
+        if (!value) { showToast('اكتب نص المهمة أولاً'); return; }
+
+        item.action_items.push({ id: genId(), task: value, assignee: '', deadline: '', done: false });
+        saveHistory();
+        taskInput.value = '';
+        renderTasks(item);
+        taskInput.focus();
+      });
+
+      /* ====== الشات مع التسجيل ====== */
+      var WELCOME_MESSAGE = 'مرحباً! أنا جاهز للإجابة على أسئلتك حول هذا التسجيل.';
+      var CHAT_TIMEOUT_MS = 60000;
+      var CHAT_CONTEXT_MESSAGES = 6; // آخر 3 تبادلات تُرسل كسياق لأسئلة المتابعة
+
+      var chatBusy = false;
+      var chatAbort = null;
+
+      var BUBBLE_BASE = 'max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words';
+      var BUBBLE_USER = 'bg-brand text-white rounded-tr-md';
+      var BUBBLE_AI = 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-100 rounded-tl-md';
+
+      function scrollChatToBottom() {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+
+      // رسالة المستخدم على اليمين (بداية السطر في RTL)، ورسالة الذكاء الاصطناعي على اليسار
+      function buildBubble(role, text) {
+        var row = el('div', 'flex ' + (role === 'user' ? 'justify-start' : 'justify-end'));
+        var bubble = el('div', BUBBLE_BASE + ' ' + (role === 'user' ? BUBBLE_USER : BUBBLE_AI), text); // textContent: آمن
+        bubble.setAttribute('dir', 'auto');
+        row.appendChild(bubble);
+        return row;
+      }
+
+      // مؤشر الكتابة (ثلاث نقاط متحركة)
+      function buildTyping() {
+        var row = el('div', 'flex justify-end');
+        var bubble = el('div', 'rounded-2xl rounded-tl-md bg-slate-100 dark:bg-slate-700 px-4 py-3.5 flex items-center gap-1.5');
+        bubble.setAttribute('role', 'status');
+        bubble.setAttribute('aria-label', 'جاري كتابة الرد');
+        [0, 150, 300].forEach(function (ms) {
+          var dot = el('span', 'w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-300 animate-bounce');
+          dot.style.animationDelay = ms + 'ms';
+          bubble.appendChild(dot);
+        });
+        row.appendChild(bubble);
+        return row;
+      }
+
+      // فقاعة خطأ داخل الشات مع زر إعادة المحاولة
+      function buildErrorBubble(err, question) {
+        var row = el('div', 'flex justify-end');
+        var box = el('div', 'max-w-[85%] rounded-2xl rounded-tl-md px-4 py-2.5 text-sm border bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800/60 space-y-1.5');
+
+        var head = el('p', 'font-semibold flex items-start gap-2 leading-relaxed');
+        head.appendChild(el('i', 'fa-solid fa-circle-exclamation mt-1 shrink-0'));
+        var msg = (err && err.userFacing) ? err.message : 'حدث خطأ غير متوقع.';
+        head.appendChild(el('span', 'break-words', msg));
+        box.appendChild(head);
+
+        var detail = (err && err.detail) ? err.detail : (!(err && err.userFacing) && err && err.message ? err.message : '');
+        if (detail) {
+          var d = el('p', 'text-xs opacity-80 break-words', detail);
+          d.setAttribute('dir', 'auto');
+          box.appendChild(d);
+        }
+
+        var retry = el('button', 'inline-flex items-center gap-1.5 text-xs font-bold rounded-lg px-2.5 py-1.5 bg-red-100 hover:bg-red-200 dark:bg-red-900/40 dark:hover:bg-red-900/60 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400');
+        retry.type = 'button';
+        retry.appendChild(el('i', 'fa-solid fa-rotate-right'));
+        retry.appendChild(el('span', '', 'إعادة المحاولة'));
+        retry.addEventListener('click', function () {
+          if (chatBusy) return;
+          row.remove();
+          sendChat(question, true);
+        });
+        box.appendChild(retry);
+
+        row.appendChild(box);
+        return row;
+      }
+
+      function renderChat(item) {
+        chatMessages.replaceChildren();
+        chatMessages.appendChild(buildBubble('ai', WELCOME_MESSAGE)); // الترحيب لا يُخزَّن
+        item.chat.forEach(function (m) { chatMessages.appendChild(buildBubble(m.role, m.text)); });
+        scrollChatToBottom();
+      }
+
+      function updateChatUI() {
+        chatSendBtn.disabled = chatBusy;
+      }
+
+      function autoResizeChatInput() {
+        chatInput.style.height = 'auto';
+        chatInput.style.height = Math.min(chatInput.scrollHeight, 128) + 'px';
+      }
+
+      // إلغاء أي طلب شات معلّق (عند التنقل بين الملخصات)
+      function cancelChat() {
+        if (chatAbort) {
+          chatAbort.abort();
+          chatAbort = null;
+        }
+        chatBusy = false;
+        updateChatUI();
+      }
+
+      // السياق: النص الكامل، وعند غيابه الملخص والنقاط
+      function buildChatContext(item) {
+        if (item.full_transcript) return item.full_transcript;
+        var parts = [];
+        if (item.executive_summary) parts.push(item.executive_summary);
+        if (item.key_points.length) parts.push(item.key_points.join('\n'));
+        return parts.join('\n');
+      }
+
+      async function askGemini(item, question, signal) {
+        var apiKey = getKey();
+        if (!apiKey) throw fail('يرجى إدخال مفتاح Gemini أولاً: افتح الإعدادات (زر الترس).');
+
+        var context = buildChatContext(item);
+        if (!context) throw fail('لا يوجد نص لهذا التسجيل للإجابة عن أسئلتك.');
+
+        if (navigator.onLine === false) {
+          throw fail('لا يوجد اتصال بالإنترنت. تحقق من اتصالك ثم أعد المحاولة.', '', true);
+        }
+
+        var prompt =
+          'بناءً على هذا النص الكامل للمحاضرة/الاجتماع: ' + context + '. ' +
+          'أجب عن سؤال المستخدم التالي بدقة واختصار باللغة العربية: ' + question + ' ' +
+          'إذا لم تتوفر الإجابة في النص فاذكر ذلك بوضوح. اكتب الإجابة بنص عادي دون رموز Markdown.';
+
+        // آخر التبادلات السابقة كسياق (بتناوب صحيح: مستخدم ثم نموذج)
+        var contents = [];
+        var lastRole = null;
+        item.chat.slice(-CHAT_CONTEXT_MESSAGES).forEach(function (m) {
+          var role = m.role === 'user' ? 'user' : 'model';
+          if (contents.length === 0 && role !== 'user') return;
+          if (role === lastRole) return;
+          contents.push({ role: role, parts: [{ text: m.text }] });
+          lastRole = role;
+        });
+        if (lastRole === 'user') contents.pop();
+
+        contents.push({ role: 'user', parts: [{ text: prompt }] });
+
+        var data = await postGemini(apiKey, {
+          contents: contents,
+          generationConfig: { temperature: 0.3 }
+        }, signal);
+
+        return readCandidate(data).text.trim();
+      }
+
+      async function sendChat(question, isRetry) {
+        var item = getCurrent();
+        if (!item || chatBusy) return;
+
+        var itemId = item.id;
+        chatBusy = true;
+        updateChatUI();
+
+        if (!isRetry) chatMessages.appendChild(buildBubble('user', question));
+        var typingRow = buildTyping();
+        chatMessages.appendChild(typingRow);
+        scrollChatToBottom();
+
+        var ctrl = new AbortController();
+        chatAbort = ctrl;
+        var timedOut = false;
+        var timeoutId = setTimeout(function () { timedOut = true; ctrl.abort(); }, CHAT_TIMEOUT_MS);
+
+        try {
+          var answer = await askGemini(item, question, ctrl.signal);
+          if (ctrl.signal.aborted) return; // أُلغي بسبب التنقل
+
+          typingRow.remove();
+
+          var live = findItem(itemId);
+          if (!live) return;
+
+          live.chat.push(
+            { role: 'user', text: question, ts: Date.now() },
+            { role: 'ai', text: answer, ts: Date.now() }
+          );
+          if (live.chat.length > MAX_CHAT_MESSAGES) live.chat = live.chat.slice(-MAX_CHAT_MESSAGES);
+          saveHistory();
+
+          if (currentId !== null && String(currentId) === String(itemId)) {
+            chatMessages.appendChild(buildBubble('ai', answer));
+            scrollChatToBottom();
+          }
+        } catch (err) {
+          typingRow.remove();
+
+          if (err && err.name === 'AbortError') {
+            if (!timedOut) return; // إلغاء بسبب التنقل: بلا رسالة
+            err = fail('انتهت مهلة الرد. الاتصال بطيء.', 'timeout بعد ' + (CHAT_TIMEOUT_MS / 1000) + ' ثانية', true);
+          }
+
+          console.error('Chat error:', err);
+          chatMessages.appendChild(buildErrorBubble(err, question));
+          scrollChatToBottom();
+        } finally {
+          clearTimeout(timeoutId);
+          if (chatAbort === ctrl) {
+            chatAbort = null;
+            chatBusy = false;
+            updateChatUI();
+          }
+        }
+      }
+
+      function handleChatSubmit() {
+        var question = chatInput.value.trim();
+        if (!question) return;
+        if (!getCurrent()) return;
+        if (chatBusy) { showToast('انتظر اكتمال الرد الحالي'); return; }
+
+        chatInput.value = '';
+        autoResizeChatInput();
+        sendChat(question, false);
+      }
+
+      chatForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        handleChatSubmit();
+      });
+
+      chatInput.addEventListener('keydown', function (e) {
+        // Enter يرسل، و Shift+Enter يضيف سطراً جديداً
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+          e.preventDefault();
+          handleChatSubmit();
+        }
+      });
+
+      chatInput.addEventListener('input', autoResizeChatInput);
+
+      chatClearBtn.addEventListener('click', function () {
+        var item = getCurrent();
+        if (!item) return;
+        if (!item.chat.length) { showToast('لا توجد محادثة لمسحها'); return; }
+        if (!window.confirm('هل تريد مسح هذه المحادثة نهائياً؟')) return;
+
+        cancelChat();
+        item.chat = [];
+        saveHistory();
+        renderChat(item);
+        showToast('تم مسح المحادثة');
+      });
+
+      /* ====== فتح عنصر من السجل / العنوان القابل للتعديل ====== */
+      function openItem(id) {
+        flushSave();
+        var item = findItem(id);
+        if (!item) return;
+
+        cancelChat();
+
+        currentId = item.id;
+        titleInput.value = item.title; // value وليس innerHTML
+        summaryDate.textContent = item.date ? 'تاريخ الإنشاء: ' + formatDate(item.date) : '';
+        renderSummary(item);
+        renderTasks(item);
+        renderTranscript(item);
+        chatInput.value = '';
+        autoResizeChatInput();
+        renderChat(item);
+        selectTab('summary');
+
+        homeView.classList.add('hidden');
+        workspaceView.classList.remove('hidden');
+        renderHistory();
+        window.scrollTo(0, 0);
+      }
+
+      titleInput.addEventListener('input', function () {
+        var item = getCurrent();
+        if (!item) return;
+        item.title = titleInput.value; // يُحدَّث في الذاكرة فوراً ويُكتب في localStorage بعد 300 مللي ثانية
+        scheduleSave();
+      });
+
+      titleInput.addEventListener('blur', function () {
+        var item = getCurrent();
+        if (!item) return;
+        var v = titleInput.value.trim() || DEFAULT_TITLE;
+        titleInput.value = v;
+        item.title = v;
+        clearTimeout(saveTimer);
+        saveTimer = null;
+        saveHistory();
+        renderHistory();
+      });
+
+      backBtn.addEventListener('click', function () {
+        flushSave();
+        cancelChat();
+        currentId = null;
+        workspaceView.classList.add('hidden');
+        homeView.classList.remove('hidden');
+        renderHistory();
+        window.scrollTo(0, 0);
+      });
+
+      window.addEventListener('pagehide', flushSave);
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') flushSave();
+      });
+
+      /* ====== التصدير: نسخ / Markdown / PDF ====== */
+      function metaLine(t) {
+        var parts = [];
+        var who = knownValue(t.assignee);
+        var when = knownValue(t.deadline);
+        if (who) parts.push('المسؤول: ' + who);
+        if (when) parts.push('الموعد: ' + when);
+        return parts.join('، ');
+      }
+
+      // نص منسّق للواتساب (العناوين بين نجمتين = عريض)
+      function buildShareText(item) {
+        var L = [];
+        L.push('*' + item.title + '*');
+
+        if (item.executive_summary) {
+          L.push('', '📝 *الملخص*', item.executive_summary);
+        }
+        if (item.key_points.length) {
+          L.push('', '📌 *النقاط الرئيسية*');
+          item.key_points.forEach(function (p) { L.push('• ' + p); });
+        }
+        if (item.action_items.length) {
+          L.push('', '✅ *المهام*');
+          item.action_items.forEach(function (t) {
+            var m = metaLine(t);
+            L.push((t.done ? '☑️ ' : '⬜ ') + t.task + (m ? ' (' + m + ')' : ''));
+          });
+        }
+        return L.join('\n');
+      }
+
+      function buildMarkdown(item) {
+        var L = [];
+        L.push('# ' + item.title, '');
+        var date = formatDate(item.date);
+        if (date) L.push('> تاريخ الإنشاء: ' + date, '');
+
+        L.push('## الملخص التنفيذي', '', item.executive_summary || '_لا يوجد ملخص_', '');
+
+        L.push('## النقاط الرئيسية', '');
+        if (item.key_points.length) {
+          item.key_points.forEach(function (p) { L.push('- ' + p); });
+        } else {
+          L.push('_لا توجد نقاط_');
+        }
+        L.push('');
+
+        L.push('## المهام', '');
+        if (item.action_items.length) {
+          item.action_items.forEach(function (t) {
+            var m = metaLine(t);
+            L.push('- [' + (t.done ? 'x' : ' ') + '] ' + t.task + (m ? ' — ' + m : ''));
+          });
+        } else {
+          L.push('_لا توجد مهام_');
+        }
+        L.push('');
+
+        L.push('## النص الكامل', '', item.full_transcript || '_لا يوجد نص_', '');
+        return L.join('\n');
+      }
+
+      async function copyToClipboard(text) {
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return true;
+          }
+        } catch (e) { /* ننتقل للطريقة الاحتياطية */ }
+
+        try {
+          var ta = document.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'fixed';
+          ta.style.top = '-1000px';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          var ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+          return ok;
+        } catch (e) {
+          return false;
+        }
+      }
+
+      function safeFileName(title) {
+        var name = String(title || '').replace(/[\\\/:*?"<>|\r\n\t]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 60);
+        return name || 'ملخص';
+      }
+
+      function downloadTextFile(filename, text, mime) {
+        var blob = new Blob([text], { type: mime });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      }
+
+      function requireCurrent() {
+        flushSave();
+        var item = getCurrent();
+        if (!item) showToast('لا يوجد ملخص مفتوح');
+        return item;
+      }
+
+      copyBtn.addEventListener('click', async function () {
+        var item = requireCurrent();
+        if (!item) return;
+        var ok = await copyToClipboard(buildShareText(item));
+        showToast(ok ? 'تم النسخ' : 'تعذّر النسخ. جرّب مرة أخرى.');
+      });
+
+      exportMdBtn.addEventListener('click', function () {
+        var item = requireCurrent();
+        if (!item) return;
+        downloadTextFile(safeFileName(item.title) + '.md', buildMarkdown(item), 'text/markdown;charset=utf-8');
+        showToast('تم تجهيز ملف Markdown');
+      });
+
+      // بناء منطقة الطباعة (العنوان، الملخص، النقاط، المهام، النص الكامل)
+      function buildPrintArea(item) {
+        printArea.replaceChildren();
+
+        printArea.appendChild(el('h1', '', item.title));
+        var date = formatDate(item.date);
+        if (date) printArea.appendChild(el('p', 'print-date', 'تاريخ الإنشاء: ' + date));
+
+        printArea.appendChild(el('h2', '', 'الملخص التنفيذي'));
+        printArea.appendChild(el('p', '', item.executive_summary || 'لا يوجد ملخص'));
+
+        printArea.appendChild(el('h2', '', 'النقاط الرئيسية'));
+        if (item.key_points.length) {
+          var ul = el('ul');
+          item.key_points.forEach(function (pt) { ul.appendChild(el('li', '', pt)); });
+          printArea.appendChild(ul);
+        } else {
+          printArea.appendChild(el('p', '', 'لا توجد نقاط'));
+        }
+
+        printArea.appendChild(el('h2', '', 'المهام'));
+        if (item.action_items.length) {
+          item.action_items.forEach(function (t) {
+            var row = el('div', 'print-task');
+            row.appendChild(el('span', '', (t.done ? '☑ ' : '☐ ') + t.task));
+            var m = metaLine(t);
+            if (m) row.appendChild(el('div', 'print-meta', m));
+            printArea.appendChild(row);
+          });
+        } else {
+          printArea.appendChild(el('p', '', 'لا توجد مهام'));
+        }
+
+        printArea.appendChild(el('h2', '', 'النص الكامل'));
+        printArea.appendChild(el('p', 'print-transcript', item.full_transcript || 'لا يوجد نص'));
+      }
+
+      exportPdfBtn.addEventListener('click', function () {
+        var item = requireCurrent();
+        if (!item) return;
+        buildPrintArea(item);
+        document.title = safeFileName(item.title); // اسم ملف PDF الافتراضي
+        window.print();
+      });
+
+      window.addEventListener('afterprint', function () {
+        document.title = BASE_TITLE;
+        printArea.replaceChildren();
+      });
+
+      /* ====== أحداث الواجهة العامة ====== */
+      menuBtn.addEventListener('click', openSidebar);
+      closeSidebarBtn.addEventListener('click', closeSidebar);
+      overlay.addEventListener('click', closeSidebar);
+
+      themeBtn.addEventListener('click', toggleTheme);
+
+      settingsBtn.addEventListener('click', openModal);
+      closeModalBtn.addEventListener('click', closeModal);
+      settingsModal.addEventListener('click', function (e) {
+        if (e.target === settingsModal) closeModal();
+      });
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape' || isLoading()) return;
+        if (isModalOpen()) closeModal();
+        else if (isSidebarOpen()) closeSidebar();
+      });
+
+      /* ====== التهيئة ====== */
+      syncThemeColor();
+      updateKeyUI();
+      updateChatUI();
+      historyItems = loadHistory();
+      renderHistory();
+
+      /* ====== تسجيل Service Worker ====== */
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('./sw.js').catch(function (err) {
+            console.warn('تعذّر تسجيل Service Worker:', err);
+          });
+        });
+      }
+    })();
+window.__appBooted = true;
