@@ -758,17 +758,16 @@
       }
 
       /* ====== محرك Gemini ====== */
-      
-      var ERROR_TOAST_MS = 9000;
       // نظام الاحتياط الصامت: تُجرَّب النماذج بالترتيب
-var MODELS = ['gemini-3.8-flash', 'gemini-1.5-flash'];
-var ATTEMPT_TIMEOUT_MS = 45000;          // مهلة كل نموذج
-var FALLBACK_STATUSES = [503, 429];      // أخطاء تنقلنا للنموذج التالي بصمت
-var FALLBACK_TEXT = 'الخوادم مزدحمة، جاري استخدام النموذج الاحتياطي...';
+      var MODELS = ['gemini-3.8-flash', 'gemini-1.5-flash'];
+      var ATTEMPT_TIMEOUT_MS = 45000;          // مهلة كل نموذج
+      var FALLBACK_STATUSES = [503, 429];      // أخطاء تنقلنا للنموذج التالي بصمت
+      var FALLBACK_TEXT = 'الخوادم مزدحمة، جاري استخدام النموذج الاحتياطي...';
 
-function geminiUrl(model) {
-  return 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent';
-}
+      function geminiUrl(model) {
+        return 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent';
+      }
+      var ERROR_TOAST_MS = 9000;
 
       var PROMPT_BASE =
         'أنت مساعد ذكي. قم بتحليل هذا الملف الصوتي (محاضرة أو اجتماع) وأعد النتيجة بصيغة JSON حصرية تحتوي على المفاتيح التالية: ' +
@@ -922,46 +921,46 @@ function geminiUrl(model) {
       }
 
       // إرسال طلب إلى Gemini وإرجاع JSON الرد (مشترك بين التلخيص والشات)
-        async function postGemini(apiKey, body, signal, model) {
-  var res;
-  try {
-    // المفتاح يُرسل في الترويسة x-goog-api-key (وليس في الرابط)
-    res = await fetch(geminiUrl(model || MODELS[0]), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey
-      },
-      body: JSON.stringify(body),
-      signal: signal
-    });
-  } catch (e) {
-    if (e && e.name === 'AbortError') throw e;
-    throw fail('تعذّر الاتصال بخوادم Google. تحقق من اتصالك بالإنترنت.', e && e.message, true);
-  }
+      async function postGemini(apiKey, body, signal, model) {
+        var res;
+        try {
+          // المفتاح يُرسل في الترويسة x-goog-api-key (وليس في الرابط)
+          res = await fetch(geminiUrl(model || MODELS[0]), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': apiKey
+            },
+            body: JSON.stringify(body),
+            signal: signal
+          });
+        } catch (e) {
+          if (e && e.name === 'AbortError') throw e;
+          throw fail('تعذّر الاتصال بخوادم Google. تحقق من اتصالك بالإنترنت.', e && e.message, true);
+        }
 
-  if (!res.ok) {
-    var errData = null;
-    try { errData = await res.json(); } catch (e) {}
-    var apiMsg = errData && errData.error && errData.error.message;
-    console.error('Gemini HTTP error (' + (model || MODELS[0]) + '):', res.status, apiMsg || '(بلا رسالة)');
-    var httpErr = fail(
-      httpErrorMessage(res.status, apiMsg),
-      'HTTP ' + res.status + (apiMsg ? ': ' + apiMsg : ''),
-      res.status >= 500 || res.status === 408
-    );
-    // 503 أو 429: يُنتقل للنموذج الاحتياطي بصمت
-    if (FALLBACK_STATUSES.indexOf(res.status) !== -1) httpErr.fallback = true;
-    throw httpErr;
-  }
+        if (!res.ok) {
+          var errData = null;
+          try { errData = await res.json(); } catch (e) {}
+          var apiMsg = errData && errData.error && errData.error.message;
+          console.error('Gemini HTTP error (' + (model || MODELS[0]) + '):', res.status, apiMsg || '(بلا رسالة)');
+          var httpErr = fail(
+            httpErrorMessage(res.status, apiMsg),
+            'HTTP ' + res.status + (apiMsg ? ': ' + apiMsg : ''),
+            res.status >= 500 || res.status === 408
+          );
+          // 503 أو 429: يُنتقل للنموذج الاحتياطي بصمت
+          if (FALLBACK_STATUSES.indexOf(res.status) !== -1) httpErr.fallback = true;
+          throw httpErr;
+        }
 
-  try {
-    return await res.json();
-  } catch (e) {
-    if (e && e.name === 'AbortError') throw e;
-    throw fail('انقطع الاتصال أثناء استلام الرد.', e && e.message, true);
-  }
-}
+        try {
+          return await res.json();
+        } catch (e) {
+          if (e && e.name === 'AbortError') throw e;
+          throw fail('انقطع الاتصال أثناء استلام الرد.', e && e.message, true);
+        }
+      }
 
       // استخراج نص أول مرشّح من رد Gemini
       function readCandidate(data) {
@@ -986,149 +985,149 @@ function geminiUrl(model) {
       }
 
       async function callGemini(apiKey, base64, mime, signal, model) {
-  var styleHint = STYLE_HINTS[styleSelect.value] || '';
-  var body = {
-    contents: [{
-      parts: [
-        { text: PROMPT_BASE + '\n' + styleHint + '\n' + PROMPT_EXTRA },
-        { inline_data: { mime_type: mime, data: base64 } }
-      ]
-    }],
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema: RESPONSE_SCHEMA,
-      temperature: 0.2
-    }
-  };
+        var styleHint = STYLE_HINTS[styleSelect.value] || '';
+        var body = {
+          contents: [{
+            parts: [
+              { text: PROMPT_BASE + '\n' + styleHint + '\n' + PROMPT_EXTRA },
+              { inline_data: { mime_type: mime, data: base64 } }
+            ]
+          }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: RESPONSE_SCHEMA,
+            temperature: 0.2
+          }
+        };
 
-  var data = await postGemini(apiKey, body, signal, model);
-  var out = readCandidate(data);
+        var data = await postGemini(apiKey, body, signal, model);
+        var out = readCandidate(data);
 
-  var parsed;
-  try {
-    parsed = parseModelJson(out.text);
-  } catch (e) {
-    if (out.finishReason === 'MAX_TOKENS') {
-      throw fail('الرد طويل جداً ولم يكتمل. جرّب تسجيلاً أقصر.', 'finishReason: MAX_TOKENS');
-    }
-    throw fail('تعذّر قراءة رد الذكاء الاصطناعي. حاول مرة أخرى.', e && e.message);
-  }
+        var parsed;
+        try {
+          parsed = parseModelJson(out.text);
+        } catch (e) {
+          if (out.finishReason === 'MAX_TOKENS') {
+            throw fail('الرد طويل جداً ولم يكتمل. جرّب تسجيلاً أقصر.', 'finishReason: MAX_TOKENS');
+          }
+          throw fail('تعذّر قراءة رد الذكاء الاصطناعي. حاول مرة أخرى.', e && e.message);
+        }
 
-  return normalizeResult(parsed);
+        return normalizeResult(parsed);
       }
 
-// محاولة واحدة مع نموذج محدد، بمهلة 45 ثانية
-async function attemptGemini(apiKey, data, runCtrl, model, isFallback) {
-  var ctrl = new AbortController();
-  var timedOut = false;
-  function onRunAbort() { ctrl.abort(); }
-  runCtrl.signal.addEventListener('abort', onRunAbort);
-  var timeoutId = setTimeout(function () { timedOut = true; ctrl.abort(); }, ATTEMPT_TIMEOUT_MS);
+      // محاولة واحدة مع نموذج محدد، بمهلة 45 ثانية
+      async function attemptGemini(apiKey, data, runCtrl, model, isFallback) {
+        var ctrl = new AbortController();
+        var timedOut = false;
+        function onRunAbort() { ctrl.abort(); }
+        runCtrl.signal.addEventListener('abort', onRunAbort);
+        var timeoutId = setTimeout(function () { timedOut = true; ctrl.abort(); }, ATTEMPT_TIMEOUT_MS);
 
-  if (!isFallback) {
-    setStage(1);
-    clearStageTimer();
-    stageTimer = setTimeout(function () {
-      if (loadingMode === 'busy' && currentStage === 1) setStage(2);
-    }, STEP_SWITCH_MS);
-  }
-  // في النموذج الاحتياطي يبقى نص "الخوادم مزدحمة..." ظاهراً
+        if (!isFallback) {
+          setStage(1);
+          clearStageTimer();
+          stageTimer = setTimeout(function () {
+            if (loadingMode === 'busy' && currentStage === 1) setStage(2);
+          }, STEP_SWITCH_MS);
+        }
+        // في النموذج الاحتياطي يبقى نص "الخوادم مزدحمة..." ظاهراً
 
-  try {
-    return await callGemini(apiKey, data.base64, data.mime, ctrl.signal, model);
-  } catch (e) {
-    if (e && e.name === 'AbortError' && timedOut && !runCtrl.signal.aborted) {
-      var te = fail('انتهت مهلة الطلب. الخوادم بطيئة أو الملف طويل.',
-        'timeout بعد ' + (ATTEMPT_TIMEOUT_MS / 1000) + ' ثانية (' + model + ')', true);
-      te.fallback = true; // انتهاء المهلة = انتقال صامت للنموذج التالي
-      throw te;
-    }
-    throw e;
-  } finally {
-    clearTimeout(timeoutId);
-    clearStageTimer();
-    runCtrl.signal.removeEventListener('abort', onRunAbort);
-  }
-}
-
-function describeError(err) {
-  console.error('Summarize error:', err);
-  if (err && err.userFacing) return err.message + (err.detail ? '\n' + err.detail : '');
-  return 'حدث خطأ غير متوقع:\n' + ((err && err.name) || 'Error') + ': ' + ((err && err.message) || '');
-}
-
-function finishProcessing() {
-  closeLoading();
-  isProcessing = false;
-  payload = null;
-  runAbort = null;
-}
-
-// الشلال: النموذج الأول ثم الاحتياطي. الخطأ يظهر فقط إذا فشلا معاً
-async function runRequest(myAbort) {
-  var apiKey = getKey();
-  var data = payload;
-  var lastErr = null;
-
-  for (var m = 0; m < MODELS.length; m++) {
-    var isFallback = m > 0;
-    var netRetried = false;
-    var moveOn = false;
-
-    while (!moveOn) {
-      try {
-        var result = await attemptGemini(apiKey, data, myAbort, MODELS[m], isFallback);
-        if (myAbort.signal.aborted) return;
-
-        setStage(3);
-        await delay(500, myAbort);
-
-        finishProcessing();
-
-        // حفظ النتيجة في السجل المحلي ثم عرضها في مساحة العمل
-        var item = addToHistory(result);
-        openItem(item.id);
-        showToast('تم التلخيص بنجاح');
-        return;
-      } catch (err) {
-        if (myAbort.signal.aborted) return;
-        console.error('Model ' + MODELS[m] + ' failed:', err);
-        lastErr = err;
-
-        if (err && err.fallback) {
-          moveOn = true; // 503 / 429 / مهلة: ننتقل للنموذج التالي
-        } else if (!(err && err.retryable)) {
-          // خطأ نهائي (مفتاح خاطئ، صوت تالف...)
-          if (m === 0) {
-            finishProcessing();
-            showToast(describeError(err), ERROR_TOAST_MS);
-            return;
+        try {
+          return await callGemini(apiKey, data.base64, data.mime, ctrl.signal, model);
+        } catch (e) {
+          if (e && e.name === 'AbortError' && timedOut && !runCtrl.signal.aborted) {
+            var te = fail('انتهت مهلة الطلب. الخوادم بطيئة أو الملف طويل.',
+              'timeout بعد ' + (ATTEMPT_TIMEOUT_MS / 1000) + ' ثانية (' + model + ')', true);
+            te.fallback = true; // انتهاء المهلة = انتقال صامت للنموذج التالي
+            throw te;
           }
-          showErrorView(err.message || 'حدث خطأ غير متوقع.', err.detail);
-          return;
-        } else if (!netRetried) {
-          // انقطاع شبكة: إعادة محاولة واحدة لنفس النموذج
-          netRetried = true;
-          loadingText.textContent = 'حدث خطأ في الاتصال، جاري إعادة المحاولة...';
-          try {
-            await waitForOnline(myAbort, 15000);
-            await delay(2000, myAbort);
-          } catch (e2) {
-            return;
-          }
-        } else {
-          moveOn = true;
+          throw e;
+        } finally {
+          clearTimeout(timeoutId);
+          clearStageTimer();
+          runCtrl.signal.removeEventListener('abort', onRunAbort);
         }
       }
-    }
 
-    if (m < MODELS.length - 1) {
-      loadingText.textContent = FALLBACK_TEXT;
-    }
-  }
+      function describeError(err) {
+        console.error('Summarize error:', err);
+        if (err && err.userFacing) return err.message + (err.detail ? '\n' + err.detail : '');
+        return 'حدث خطأ غير متوقع:\n' + ((err && err.name) || 'Error') + ': ' + ((err && err.message) || '');
+      }
 
-  showErrorView(lastErr.message, lastErr.detail);
-}
+      function finishProcessing() {
+        closeLoading();
+        isProcessing = false;
+        payload = null;
+        runAbort = null;
+      }
+
+      // الشلال: النموذج الأول ثم الاحتياطي. الخطأ يظهر فقط إذا فشلا معاً
+      async function runRequest(myAbort) {
+        var apiKey = getKey();
+        var data = payload;
+        var lastErr = null;
+
+        for (var m = 0; m < MODELS.length; m++) {
+          var isFallback = m > 0;
+          var netRetried = false;
+          var moveOn = false;
+
+          while (!moveOn) {
+            try {
+              var result = await attemptGemini(apiKey, data, myAbort, MODELS[m], isFallback);
+              if (myAbort.signal.aborted) return;
+
+              setStage(3);
+              await delay(500, myAbort);
+
+              finishProcessing();
+
+              // حفظ النتيجة في السجل المحلي ثم عرضها في مساحة العمل
+              var item = addToHistory(result);
+              openItem(item.id);
+              showToast('تم التلخيص بنجاح');
+              return;
+            } catch (err) {
+              if (myAbort.signal.aborted) return;
+              console.error('Model ' + MODELS[m] + ' failed:', err);
+              lastErr = err;
+
+              if (err && err.fallback) {
+                moveOn = true; // 503 / 429 / مهلة: ننتقل للنموذج التالي
+              } else if (!(err && err.retryable)) {
+                // خطأ نهائي (مفتاح خاطئ، صوت تالف...)
+                if (m === 0) {
+                  finishProcessing();
+                  showToast(describeError(err), ERROR_TOAST_MS);
+                  return;
+                }
+                showErrorView(err.message || 'حدث خطأ غير متوقع.', err.detail);
+                return;
+              } else if (!netRetried) {
+                // انقطاع شبكة: إعادة محاولة واحدة لنفس النموذج
+                netRetried = true;
+                loadingText.textContent = 'حدث خطأ في الاتصال، جاري إعادة المحاولة...';
+                try {
+                  await waitForOnline(myAbort, 15000);
+                  await delay(2000, myAbort);
+                } catch (e2) {
+                  return;
+                }
+              } else {
+                moveOn = true;
+              }
+            }
+          }
+
+          if (m < MODELS.length - 1) {
+            loadingText.textContent = FALLBACK_TEXT;
+          }
+        }
+
+        showErrorView(lastErr.message, lastErr.detail);
+      }
 
       async function summarize(blob, mime) {
         if (isProcessing) return;
