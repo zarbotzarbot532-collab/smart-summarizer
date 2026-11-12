@@ -758,10 +758,17 @@
       }
 
       /* ====== محرك Gemini ====== */
-      var GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent';
-      var REQUEST_TIMEOUT_MS = 180000;
+      
       var ERROR_TOAST_MS = 9000;
-      var MAX_ATTEMPTS = 2;
+      // نظام الاحتياط الصامت: تُجرَّب النماذج بالترتيب
+var MODELS = ['gemini-3.8-flash', 'gemini-1.5-flash'];
+var ATTEMPT_TIMEOUT_MS = 45000;          // مهلة كل نموذج
+var FALLBACK_STATUSES = [503, 429];      // أخطاء تنقلنا للنموذج التالي بصمت
+var FALLBACK_TEXT = 'الخوادم مزدحمة، جاري استخدام النموذج الاحتياطي...';
+
+function geminiUrl(model) {
+  return 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent';
+}
 
       var PROMPT_BASE =
         'أنت مساعد ذكي. قم بتحليل هذا الملف الصوتي (محاضرة أو اجتماع) وأعد النتيجة بصيغة JSON حصرية تحتوي على المفاتيح التالية: ' +
