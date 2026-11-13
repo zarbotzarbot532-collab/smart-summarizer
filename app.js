@@ -796,7 +796,7 @@
       var GROQ_STT_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
       var GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
       var GROQ_STT_MODEL = 'whisper-large-v3-turbo';
-      var GROQ_CHAT_MODEL = 'llama-3.3-70b-versatile';
+      var GROQ_CHAT_MODEL = 'openai/gpt-oss-120b';
       var GROQ_TIMEOUT_MS = 60000;             // مهلة كل خطوة من خطوتي Groq
       var GROQ_TEXT = 'جاري استخدام النموذج الاحتياطي السريع...';
       var AUDIO_EXT = {
