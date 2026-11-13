@@ -29,6 +29,8 @@
       var groqApiKeyInput = $('groqApiKeyInput');
       var toggleGroqKeyBtn = $('toggleGroqKeyBtn');
       var toggleGroqKeyIcon = $('toggleGroqKeyIcon');
+      var groqKeyStatus = $('groqKeyStatus');
+      var deleteGroqKeyBtn = $('deleteGroqKeyBtn');
 
       /* ====== عناصر الاستقبال ====== */
       var homeView = $('homeView');
@@ -133,7 +135,7 @@
 
       function openModal() {
         updateKeyUI();
-        groqApiKeyInput.value = getGroqKey(); // مفتاح Groq يُعرض عند فتح الإعدادات
+        groqApiKeyInput.value = ''; // الحقل يبدأ فارغاً دائماً (المفتاح لا يُعرض أبداً)
         settingsModal.classList.remove('hidden');
         settingsModal.classList.add('flex');
         document.body.classList.add('overflow-hidden');
@@ -193,6 +195,12 @@
           ? 'يوجد مفتاح محفوظ (ينتهي بـ ' + key.slice(-4) + '). أدخل مفتاحاً جديداً لاستبداله.'
           : 'لا يوجد مفتاح محفوظ حالياً.';
         deleteKeyBtn.classList.toggle('hidden', key.length === 0);
+
+        var gq = getGroqKey();
+        groqKeyStatus.textContent = gq
+          ? 'يوجد مفتاح Groq محفوظ (ينتهي بـ ' + gq.slice(-4) + '). أدخل مفتاحاً جديداً لاستبداله.'
+          : 'لا يوجد مفتاح Groq محفوظ حالياً.';
+        deleteGroqKeyBtn.classList.toggle('hidden', gq.length === 0);
       }
 
       function setKeyVisible(visible) {
@@ -221,23 +229,28 @@
         e.preventDefault();
         var gemini = apiKeyInput.value.trim();
         var groq = groqApiKeyInput.value.trim();
-        var hadGroq = getGroqKey().length > 0;
 
-        if (!gemini && !groq && !hadGroq) { showToast('أدخل مفتاحاً واحداً على الأقل (Gemini أو Groq)'); return; }
+        if (!gemini && !groq) { showToast('أدخل مفتاحاً واحداً على الأقل (Gemini أو Groq)'); return; }
         if (gemini && !KEY_PATTERN.test(gemini)) { showToast('صيغة مفتاح Gemini غير صحيحة، تأكد من نسخه كاملاً'); return; }
         if (groq && !GROQ_PATTERN.test(groq)) { showToast('صيغة مفتاح Groq غير صحيحة، يجب أن يبدأ بـ gsk_'); return; }
 
         try {
           if (gemini) localStorage.setItem(KEY_STORAGE, gemini);
           if (groq) localStorage.setItem(GROQ_KEY_STORAGE, groq);
-          else if (hadGroq) localStorage.removeItem(GROQ_KEY_STORAGE); // حقل Groq فارغ = حذف المفتاح
         } catch (err) {
           showToast('تعذّر حفظ المفتاح (التخزين المحلي معطّل في المتصفح)');
           return;
         }
         updateKeyUI();
-        closeModal();
-        showToast(!groq && hadGroq ? 'تم الحفظ وحذف مفتاح Groq' : 'تم حفظ المفتاح بنجاح');
+        closeModal(); // يمسح حقلي المفتاحين فوراً بعد الحفظ
+        showToast('تم حفظ المفتاح بنجاح');
+      });
+
+      deleteGroqKeyBtn.addEventListener('click', function () {
+        try { localStorage.removeItem(GROQ_KEY_STORAGE); } catch (e) {}
+        groqApiKeyInput.value = '';
+        updateKeyUI();
+        showToast('تم حذف مفتاح Groq');
       });
 
       deleteKeyBtn.addEventListener('click', function () {
@@ -789,6 +802,8 @@
       // نظام الاحتياط الصامت: تُجرَّب النماذج بالترتيب
       var MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
       var ATTEMPT_TIMEOUT_MS = 45000;          // مهلة كل نموذج
+      var BUSY_RETRY_DELAY_MS = 2000;          // عند 503 من النموذج الأول: انتظار ثانيتين
+      var BUSY_RETRY_TIMEOUT_MS = 20000;       // ثم محاولة أخيرة قصيرة مع نفس النموذج
       var FALLBACK_STATUSES = [503, 429];      // أخطاء تنقلنا للنموذج التالي بصمت
       var FALLBACK_TEXT = 'الخوادم مزدحمة، جاري استخدام النموذج الاحتياطي...';
 
@@ -991,6 +1006,7 @@
             'HTTP ' + res.status + (apiMsg ? ': ' + apiMsg : ''),
             res.status >= 500 || res.status === 408
           );
+          httpErr.status = res.status;
           // 503 أو 429: يُنتقل للنموذج الاحتياطي بصمت
           if (FALLBACK_STATUSES.indexOf(res.status) !== -1) httpErr.fallback = true;
           throw httpErr;
@@ -1059,12 +1075,13 @@
       }
 
       // محاولة واحدة مع نموذج محدد، بمهلة 45 ثانية
-      async function attemptGemini(apiKey, data, runCtrl, model, isFallback) {
+      async function attemptGemini(apiKey, data, runCtrl, model, isFallback, timeoutMs) {
+        var limit = timeoutMs || ATTEMPT_TIMEOUT_MS;
         var ctrl = new AbortController();
         var timedOut = false;
         function onRunAbort() { ctrl.abort(); }
         runCtrl.signal.addEventListener('abort', onRunAbort);
-        var timeoutId = setTimeout(function () { timedOut = true; ctrl.abort(); }, ATTEMPT_TIMEOUT_MS);
+        var timeoutId = setTimeout(function () { timedOut = true; ctrl.abort(); }, limit);
 
         if (!isFallback) {
           setStage(1);
@@ -1080,7 +1097,7 @@
         } catch (e) {
           if (e && e.name === 'AbortError' && timedOut && !runCtrl.signal.aborted) {
             var te = fail('انتهت مهلة الطلب. الخوادم بطيئة أو الملف طويل.',
-              'timeout بعد ' + (ATTEMPT_TIMEOUT_MS / 1000) + ' ثانية (' + model + ')', true);
+              'timeout بعد ' + (limit / 1000) + ' ثانية (' + model + ')', true);
             te.fallback = true; // انتهاء المهلة = انتقال صامت للنموذج التالي
             throw te;
           }
@@ -1261,12 +1278,14 @@
         for (var m = 0; m < geminiLayers; m++) {
           var isFallback = m > 0;
           var netRetried = false;
+          var busyRetried = false;
+          var attemptTimeout = ATTEMPT_TIMEOUT_MS;
           var moveOn = false;
           layersTried++;
 
           while (!moveOn) {
             try {
-              var result = await attemptGemini(geminiKey, data, myAbort, MODELS[m], isFallback);
+              var result = await attemptGemini(geminiKey, data, myAbort, MODELS[m], isFallback, attemptTimeout);
               if (myAbort.signal.aborted) return;
               await completeSuccess(result, myAbort);
               return;
@@ -1275,7 +1294,16 @@
               console.error('Model ' + MODELS[m] + ' failed:', err);
               lastErr = err;
 
-              if (err && err.retryable && !err.fallback && !netRetried) {
+              if (m === 0 && err && err.status === 503 && !busyRetried) {
+                // 503 (مزدحم) من النموذج الأول: لا ننتظر المهلة الطويلة. ثانيتان ثم محاولة أخيرة قصيرة
+                busyRetried = true;
+                attemptTimeout = BUSY_RETRY_TIMEOUT_MS;
+                try {
+                  await delay(BUSY_RETRY_DELAY_MS, myAbort);
+                } catch (e2) {
+                  return;
+                }
+              } else if (err && err.retryable && !err.fallback && !netRetried) {
                 // انقطاع شبكة: إعادة محاولة واحدة لنفس النموذج
                 netRetried = true;
                 loadingText.textContent = 'حدث خطأ في الاتصال، جاري إعادة المحاولة...';
@@ -1853,7 +1881,10 @@
 
       /* ====== الشات مع التسجيل ====== */
       var WELCOME_MESSAGE = 'مرحباً! أنا جاهز للإجابة على أسئلتك حول هذا التسجيل.';
-      var CHAT_TIMEOUT_MS = 60000;
+      var CHAT_GEMINI_TIMEOUT_MS = 20000;       // مهلة كل نموذج Gemini في الشات
+      var CHAT_BUSY_RETRY_TIMEOUT_MS = 12000;   // المحاولة القصيرة بعد 503
+      var CHAT_GROQ_TIMEOUT_MS = 30000;
+      var CHAT_SEARCH_TEXT = 'جاري البحث في النص...';
       var CHAT_CONTEXT_MESSAGES = 6; // آخر 3 تبادلات تُرسل كسياق لأسئلة المتابعة
 
       var chatBusy = false;
@@ -1876,17 +1907,25 @@
         return row;
       }
 
-      // مؤشر الكتابة (ثلاث نقاط متحركة)
+      // مؤشر الكتابة: ثلاث نقاط متحركة مع رسالة صغيرة
       function buildTyping() {
         var row = el('div', 'flex justify-end');
-        var bubble = el('div', 'rounded-2xl rounded-tl-md bg-slate-100 dark:bg-slate-700 px-4 py-3.5 flex items-center gap-1.5');
+        var bubble = el('div', 'rounded-2xl rounded-tl-md bg-slate-100 dark:bg-slate-700 px-4 py-3 flex items-center gap-2.5');
         bubble.setAttribute('role', 'status');
-        bubble.setAttribute('aria-label', 'جاري كتابة الرد');
+        bubble.setAttribute('aria-label', 'جاري البحث في النص');
+
+        var dots = el('span', 'flex items-center gap-1.5');
         [0, 150, 300].forEach(function (ms) {
           var dot = el('span', 'w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-300 animate-bounce');
           dot.style.animationDelay = ms + 'ms';
-          bubble.appendChild(dot);
+          dots.appendChild(dot);
         });
+        bubble.appendChild(dots);
+
+        var label = el('span', 'text-xs text-slate-500 dark:text-slate-300', CHAT_SEARCH_TEXT);
+        label.setAttribute('data-typing-label', '');
+        bubble.appendChild(label);
+
         row.appendChild(bubble);
         return row;
       }
@@ -1959,9 +1998,58 @@
         return parts.join('\n');
       }
 
-      async function askGemini(item, question, signal) {
-        var apiKey = getKey();
-        if (!apiKey) throw fail('يرجى إدخال مفتاح Gemini أولاً: افتح الإعدادات (زر الترس).');
+      // طلب Gemini واحد للشات بمهلة خاصة بهذه الطبقة
+      async function chatGeminiLayer(apiKey, body, model, chatCtrl, timeoutMs) {
+        var ctrl = new AbortController();
+        var timedOut = false;
+        function onAbort() { ctrl.abort(); }
+        chatCtrl.signal.addEventListener('abort', onAbort);
+        var timeoutId = setTimeout(function () { timedOut = true; ctrl.abort(); }, timeoutMs);
+
+        try {
+          var data = await postGemini(apiKey, body, ctrl.signal, model);
+          return readCandidate(data).text.trim();
+        } catch (e) {
+          if (e && e.name === 'AbortError' && timedOut && !chatCtrl.signal.aborted) {
+            throw fail('انتهت مهلة الرد. الخوادم بطيئة.', 'timeout بعد ' + (timeoutMs / 1000) + ' ثانية (' + model + ')', true);
+          }
+          throw e;
+        } finally {
+          clearTimeout(timeoutId);
+          chatCtrl.signal.removeEventListener('abort', onAbort);
+        }
+      }
+
+      // طبقة Groq للشات (نص فقط، بدون وضع JSON)
+      async function chatWithGroq(apiKey, contents, chatCtrl) {
+        var messages = [{
+          role: 'system',
+          content: 'أنت مساعد يجيب عن أسئلة حول نص محاضرة أو اجتماع. أجب بالعربية بدقة واختصار وبنص عادي دون رموز Markdown.'
+        }];
+        contents.forEach(function (c) {
+          messages.push({ role: c.role === 'model' ? 'assistant' : 'user', content: c.parts[0].text });
+        });
+
+        var res = await groqFetch(GROQ_CHAT_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + apiKey,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ model: GROQ_CHAT_MODEL, messages: messages, temperature: 0.3 })
+        }, chatCtrl, CHAT_GROQ_TIMEOUT_MS);
+
+        var text = res && res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content;
+        text = str(text);
+        if (!text) throw fail('لم يُرجع Groq أي نص. حاول مرة أخرى.');
+        return text;
+      }
+
+      // الشلال للشات: Gemini 3.8 ← Gemini 3.5 Lite ← Groq (أي فشل ينتقل للطبقة التالية بصمت)
+      async function askGemini(item, question, chatCtrl, onStatus) {
+        var geminiKey = getKey();
+        var groqKey = getGroqKey();
+        if (!geminiKey && !groqKey) throw fail('يرجى إدخال مفتاح Gemini أو Groq أولاً: افتح الإعدادات (زر الترس).');
 
         var context = buildChatContext(item);
         if (!context) throw fail('لا يوجد نص لهذا التسجيل للإجابة عن أسئلتك.');
@@ -1989,12 +2077,48 @@
 
         contents.push({ role: 'user', parts: [{ text: prompt }] });
 
-        var data = await postGemini(apiKey, {
-          contents: contents,
-          generationConfig: { temperature: 0.3 }
-        }, signal);
+        var body = { contents: contents, generationConfig: { temperature: 0.3 } };
+        var lastErr = null;
 
-        return readCandidate(data).text.trim();
+        if (geminiKey) {
+          for (var m = 0; m < MODELS.length; m++) {
+            var busyRetried = false;
+            var timeoutMs = CHAT_GEMINI_TIMEOUT_MS;
+            var moveOn = false;
+
+            while (!moveOn) {
+              try {
+                return await chatGeminiLayer(geminiKey, body, MODELS[m], chatCtrl, timeoutMs);
+              } catch (err) {
+                if (chatCtrl.signal.aborted || (err && err.name === 'AbortError')) throw err;
+                console.error('Chat model ' + MODELS[m] + ' failed:', err);
+                lastErr = err;
+
+                if (m === 0 && err && err.status === 503 && !busyRetried) {
+                  // مزدحم: ننتظر ثانيتين ثم محاولة أخيرة قصيرة مع نفس النموذج
+                  busyRetried = true;
+                  timeoutMs = CHAT_BUSY_RETRY_TIMEOUT_MS;
+                  await delay(BUSY_RETRY_DELAY_MS, chatCtrl);
+                } else {
+                  moveOn = true;
+                }
+              }
+            }
+          }
+        }
+
+        if (groqKey) {
+          if (onStatus && geminiKey) onStatus(GROQ_TEXT); // تغيير الرسالة فقط عند الانتقال من Gemini
+          try {
+            return await chatWithGroq(groqKey, contents, chatCtrl);
+          } catch (err) {
+            if (chatCtrl.signal.aborted || (err && err.name === 'AbortError')) throw err;
+            console.error('Chat Groq failed:', err);
+            lastErr = err;
+          }
+        }
+
+        throw lastErr || fail('تعذّر الحصول على رد. حاول مرة أخرى.');
       }
 
       async function sendChat(question, isRetry) {
@@ -2010,13 +2134,14 @@
         chatMessages.appendChild(typingRow);
         scrollChatToBottom();
 
+        var typingLabel = typingRow.querySelector('[data-typing-label]');
+        function onStatus(text) { if (typingLabel) typingLabel.textContent = text; }
+
         var ctrl = new AbortController();
         chatAbort = ctrl;
-        var timedOut = false;
-        var timeoutId = setTimeout(function () { timedOut = true; ctrl.abort(); }, CHAT_TIMEOUT_MS);
 
         try {
-          var answer = await askGemini(item, question, ctrl.signal);
+          var answer = await askGemini(item, question, ctrl, onStatus);
           if (ctrl.signal.aborted) return; // أُلغي بسبب التنقل
 
           typingRow.remove();
@@ -2038,16 +2163,12 @@
         } catch (err) {
           typingRow.remove();
 
-          if (err && err.name === 'AbortError') {
-            if (!timedOut) return; // إلغاء بسبب التنقل: بلا رسالة
-            err = fail('انتهت مهلة الرد. الاتصال بطيء.', 'timeout بعد ' + (CHAT_TIMEOUT_MS / 1000) + ' ثانية', true);
-          }
+          if (err && err.name === 'AbortError') return; // إلغاء بسبب التنقل: بلا رسالة
 
           console.error('Chat error:', err);
           chatMessages.appendChild(buildErrorBubble(err, question));
           scrollChatToBottom();
         } finally {
-          clearTimeout(timeoutId);
           if (chatAbort === ctrl) {
             chatAbort = null;
             chatBusy = false;
