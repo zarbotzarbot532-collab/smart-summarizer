@@ -156,7 +156,7 @@
       /* ====== الوضع الليلي / النهاري ====== */
       function syncThemeColor() {
         var isDark = document.documentElement.classList.contains('dark');
-        if (themeMeta) themeMeta.setAttribute('content', isDark ? '#1E293B' : '#4F46E5');
+        if (themeMeta) themeMeta.setAttribute('content', isDark ? '#0B0B10' : '#DC2626');
       }
 
       function toggleTheme() {
@@ -325,16 +325,16 @@
       function setRecordingUI(active) {
         isRecording = active;
         if (active) {
-          recordBtn.classList.remove('bg-brand', 'hover:bg-brand-700');
-          recordBtn.classList.add('bg-red-600', 'hover:bg-red-700');
+          recordBtn.classList.remove('bg-caesar', 'glow-caesar');
+          recordBtn.classList.add('rec-live');
           recordIcon.classList.remove('fa-microphone');
           recordIcon.classList.add('fa-stop');
           pulseRing.classList.remove('hidden');
           recordBtn.setAttribute('aria-label', 'إيقاف التسجيل');
           recordStatus.textContent = 'جارٍ التسجيل... اضغط للإيقاف';
         } else {
-          recordBtn.classList.add('bg-brand', 'hover:bg-brand-700');
-          recordBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+          recordBtn.classList.add('bg-caesar', 'glow-caesar');
+          recordBtn.classList.remove('rec-live');
           recordIcon.classList.add('fa-microphone');
           recordIcon.classList.remove('fa-stop');
           pulseRing.classList.add('hidden');
@@ -969,7 +969,7 @@
         }).filter(function (it) { return it.task; });
 
         return {
-          title: str(raw.title) || 'ملخص بدون عنوان',
+          title: str(raw.title) || 'خلاصة بدون عنوان',
           executive_summary: str(raw.executive_summary),
           key_points: points,
           action_items: items,
@@ -1168,11 +1168,13 @@
             try { errData = await res.json(); } catch (e) {}
             var apiMsg = errData && errData.error && errData.error.message;
             console.error('Groq HTTP error:', res.status, apiMsg || '(بلا رسالة)');
-            throw fail(
+            var groqErr = fail(
               groqErrorMessage(res.status, apiMsg),
               'Groq HTTP ' + res.status + (apiMsg ? ': ' + apiMsg : ''),
               res.status >= 500 || res.status === 429 || res.status === 408
             );
+            groqErr.status = res.status;
+            throw groqErr;
           }
 
           try {
@@ -1458,7 +1460,7 @@
       var HISTORY_KEY = 'summaries_history';
       var MAX_HISTORY = 100;
       var MAX_CHAT_MESSAGES = 100;
-      var DEFAULT_TITLE = 'ملخص بدون عنوان';
+      var DEFAULT_TITLE = 'خلاصة بدون عنوان';
 
       var historyItems = [];
       var currentId = null;
@@ -1529,7 +1531,7 @@
         } catch (e) {
           console.warn('تعذّر حفظ السجل:', e);
           if (!lastSaveFailed) {
-            showToast('تعذّر حفظ السجل (مساحة التخزين ممتلئة أو معطّلة). احذف بعض الملخصات القديمة.', ERROR_TOAST_MS);
+            showToast('تعذّر حفظ السجل (مساحة التخزين ممتلئة أو معطّلة). احذف بعض الخلاصات القديمة.', ERROR_TOAST_MS);
           }
           lastSaveFailed = true;
           return false;
@@ -1627,7 +1629,7 @@
         if (!historyItems.length || !list.length) {
           var empty = el('div', 'h-full min-h-[10rem] flex flex-col items-center justify-center text-center text-slate-400 dark:text-slate-500 gap-3');
           empty.appendChild(el('i', (historyItems.length ? 'fa-solid fa-magnifying-glass' : 'fa-regular fa-folder-open') + ' text-4xl'));
-          empty.appendChild(el('p', 'text-sm', historyItems.length ? 'لا توجد نتائج مطابقة' : 'لا توجد ملخصات بعد'));
+          empty.appendChild(el('p', 'text-sm', historyItems.length ? 'لا توجد نتائج مطابقة' : 'لا توجد خلاصات بعد'));
           historyList.appendChild(empty);
           return;
         }
@@ -1654,7 +1656,7 @@
           delBtn.type = 'button';
           delBtn.setAttribute('data-action', 'delete');
           delBtn.setAttribute('data-id', String(h.id));
-          delBtn.setAttribute('aria-label', 'حذف الملخص');
+          delBtn.setAttribute('aria-label', 'حذف الخلاصة');
           delBtn.appendChild(el('i', 'fa-regular fa-trash-can text-sm'));
 
           li.appendChild(openBtn);
@@ -1667,7 +1669,7 @@
       function deleteHistoryItem(id) {
         var idx = findIndex(id);
         if (idx === -1) return;
-        if (!window.confirm('هل تريد حذف هذا الملخص نهائياً من السجل؟')) return;
+        if (!window.confirm('هل تريد حذف هذه الخلاصة نهائياً من السجل؟')) return;
 
         flushSave();
         historyItems.splice(idx, 1);
@@ -1680,7 +1682,7 @@
           homeView.classList.remove('hidden');
         }
         renderHistory();
-        showToast('تم حذف الملخص');
+        showToast('تم حذف الخلاصة');
       }
 
       historyList.addEventListener('click', function (e) {
@@ -1698,7 +1700,7 @@
       historySearch.addEventListener('input', renderHistory);
 
       /* ====== مساحة العمل (Workspace) ====== */
-      var TAB_ACTIVE = ['bg-brand', 'text-white', 'shadow'];
+      var TAB_ACTIVE = ['bg-caesar', 'text-white', 'shadow'];
       var TAB_IDLE = ['text-slate-600', 'dark:text-slate-300', 'hover:bg-slate-100', 'dark:hover:bg-slate-700'];
 
       function selectTab(name) {
@@ -1711,7 +1713,7 @@
         panels.forEach(function (p) {
           p.classList.toggle('hidden', p.getAttribute('data-panel') !== name);
         });
-        if (name === 'chat') scrollChatToBottom();
+        if (name === 'chat') { autoResizeChatInput(); scrollChatToBottom(); }
       }
 
       tabBtns.forEach(function (btn) {
@@ -1722,13 +1724,13 @@
         panelSummary.replaceChildren();
 
         var c1 = el('div', CARD);
-        c1.appendChild(cardTitle('fa-bolt', 'الملخص التنفيذي'));
+        c1.appendChild(cardTitle('fa-bolt', 'الخلاصة التنفيذية'));
         if (item.executive_summary) {
           var p = el('p', 'leading-loose whitespace-pre-line', item.executive_summary);
           p.setAttribute('dir', 'auto');
           c1.appendChild(p);
         } else {
-          c1.appendChild(emptyNote('لا يوجد ملخص'));
+          c1.appendChild(emptyNote('لا توجد خلاصة'));
         }
         panelSummary.appendChild(c1);
 
@@ -1752,7 +1754,7 @@
         panelTranscript.replaceChildren();
 
         var card = el('div', CARD);
-        card.appendChild(cardTitle('fa-file-lines', 'النص الكامل'));
+        card.appendChild(cardTitle('fa-file-lines', 'التفريغ الصوتي'));
         if (item.full_transcript) {
           var p = el('p', 'leading-loose whitespace-pre-wrap text-slate-700 dark:text-slate-200', item.full_transcript);
           p.setAttribute('dir', 'auto');
@@ -1879,61 +1881,87 @@
         taskInput.focus();
       });
 
-      /* ====== الشات مع التسجيل ====== */
-      var WELCOME_MESSAGE = 'مرحباً! أنا جاهز للإجابة على أسئلتك حول هذا التسجيل.';
+      /* ====== الشات مع سيزار ====== */
+      var WELCOME_MESSAGE = 'أهلاً، أنا سيزار. اسألني أي شيء عن هذا التسجيل وسأجيبك فوراً.';
       var CHAT_GEMINI_TIMEOUT_MS = 20000;       // مهلة كل نموذج Gemini في الشات
       var CHAT_BUSY_RETRY_TIMEOUT_MS = 12000;   // المحاولة القصيرة بعد 503
-      var CHAT_GROQ_TIMEOUT_MS = 30000;
+      var CHAT_GROQ_TIMEOUT_MS = 20000;         // مهلة كل نموذج Groq في الشات
       var CHAT_SEARCH_TEXT = 'جاري البحث في النص...';
-      var CHAT_CONTEXT_MESSAGES = 6; // آخر 3 تبادلات تُرسل كسياق لأسئلة المتابعة
+      // السؤال الأول فقط: يُرسل التفريغ (أول 4000 حرف كحد أقصى) ليفهم سيزار المحاضرة
+      // أسئلة المتابعة: لا يُرسل التفريغ أبداً، فقط آخر 4 رسائل من المحادثة السابقة
+      var CHAT_FIRST_TRANSCRIPT_CHARS = 4000;
+      var CHAT_CONTEXT_MESSAGES = 4;
+      // true: تُرفق في المتابعة خلاصة قصيرة (الخلاصة والنقاط والمهام فقط، بلا تفريغ) لتثبيت المرجع.
+      // false: المتابعة تعتمد على آخر 4 رسائل فقط.
+      var CHAT_FOLLOWUP_GROUNDING = true;
+      // الشات يبدأ بـ Groq (الأسرع) ثم Gemini كاحتياط. النموذج الثاني في Groq يعمل إن تعذّر الأول
+      var GROQ_CHAT_MODELS = ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b'];
+      var CHAT_SUGGESTIONS = ['ما أهم فكرة في التسجيل؟', 'ما القرارات المتفق عليها؟', 'لخّص التسجيل في جملتين'];
 
       var chatBusy = false;
       var chatAbort = null;
 
-      var BUBBLE_BASE = 'max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words';
-      var BUBBLE_USER = 'bg-brand text-white rounded-tr-md';
-      var BUBBLE_AI = 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-100 rounded-tl-md';
+      var BUBBLE_BASE = 'min-w-0 px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap break-words';
+      var BUBBLE_USER = 'max-w-[85%] md:max-w-[34rem] bg-caesar text-white rounded-2xl rounded-br-md shadow-md';
+      var BUBBLE_AI = 'max-w-[calc(100%-3.25rem)] md:max-w-[36rem] bubble-ai rounded-2xl rounded-bl-md';
 
       function scrollChatToBottom() {
         chatMessages.scrollTop = chatMessages.scrollHeight;
       }
 
-      // رسالة المستخدم على اليمين (بداية السطر في RTL)، ورسالة الذكاء الاصطناعي على اليسار
+      // صورة سيزار: دائرة 40×40 فيها رمز الثقب الأسود المتوهج (SVG عبر createElementNS)
+      var SVG_NS = 'http://www.w3.org/2000/svg';
+      function buildAvatar() {
+        var wrap = el('span', 'caesar-avatar');
+        wrap.setAttribute('aria-hidden', 'true');
+        var svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('viewBox', '0 0 64 64');
+        var use = document.createElementNS(SVG_NS, 'use');
+        use.setAttribute('href', '#bh');
+        svg.appendChild(use);
+        wrap.appendChild(svg);
+        return wrap;
+      }
+
+      // رسالة المستخدم على اليمين (بداية السطر في RTL)، ورد سيزار على اليسار ومعه الصورة
       function buildBubble(role, text) {
-        var row = el('div', 'flex ' + (role === 'user' ? 'justify-start' : 'justify-end'));
-        var bubble = el('div', BUBBLE_BASE + ' ' + (role === 'user' ? BUBBLE_USER : BUBBLE_AI), text); // textContent: آمن
+        var isUser = role === 'user';
+        var row = el('div', 'flex items-end gap-2.5 ' + (isUser ? 'justify-start' : 'justify-end'));
+        var bubble = el('div', BUBBLE_BASE + ' ' + (isUser ? BUBBLE_USER : BUBBLE_AI), text); // textContent: آمن
         bubble.setAttribute('dir', 'auto');
         row.appendChild(bubble);
+        if (!isUser) row.appendChild(buildAvatar());
         return row;
       }
 
-      // مؤشر الكتابة: ثلاث نقاط متحركة مع رسالة صغيرة
+      // مؤشر الكتابة: فقاعة رمادية فيها ثلاث نقاط تنبض مع رسالة صغيرة
       function buildTyping() {
-        var row = el('div', 'flex justify-end');
-        var bubble = el('div', 'rounded-2xl rounded-tl-md bg-slate-100 dark:bg-slate-700 px-4 py-3 flex items-center gap-2.5');
+        var row = el('div', 'flex items-end gap-2.5 justify-end');
+        var bubble = el('div', 'bubble-ai rounded-2xl rounded-bl-md px-4 py-3 flex items-center gap-3');
         bubble.setAttribute('role', 'status');
         bubble.setAttribute('aria-label', 'جاري البحث في النص');
 
         var dots = el('span', 'flex items-center gap-1.5');
-        [0, 150, 300].forEach(function (ms) {
-          var dot = el('span', 'w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-300 animate-bounce');
+        [0, 160, 320].forEach(function (ms) {
+          var dot = el('span', 'typing-dot');
           dot.style.animationDelay = ms + 'ms';
           dots.appendChild(dot);
         });
         bubble.appendChild(dots);
 
-        var label = el('span', 'text-xs text-slate-500 dark:text-slate-300', CHAT_SEARCH_TEXT);
+        var label = el('span', 'text-xs text-slate-300', CHAT_SEARCH_TEXT);
         label.setAttribute('data-typing-label', '');
         bubble.appendChild(label);
 
         row.appendChild(bubble);
+        row.appendChild(buildAvatar());
         return row;
       }
 
       // فقاعة خطأ داخل الشات مع زر إعادة المحاولة
       function buildErrorBubble(err, question) {
-        var row = el('div', 'flex justify-end');
-        var box = el('div', 'max-w-[85%] rounded-2xl rounded-tl-md px-4 py-2.5 text-sm border bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800/60 space-y-1.5');
+        var row = el('div', 'flex items-end gap-2.5 justify-end');
+        var box = el('div', 'max-w-[calc(100%-3.25rem)] min-w-0 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm border bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-200 dark:border-red-800/60 space-y-1.5');
 
         var head = el('p', 'font-semibold flex items-start gap-2 leading-relaxed');
         head.appendChild(el('i', 'fa-solid fa-circle-exclamation mt-1 shrink-0'));
@@ -1948,7 +1976,7 @@
           box.appendChild(d);
         }
 
-        var retry = el('button', 'inline-flex items-center gap-1.5 text-xs font-bold rounded-lg px-2.5 py-1.5 bg-red-100 hover:bg-red-200 dark:bg-red-900/40 dark:hover:bg-red-900/60 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400');
+        var retry = el('button', 'inline-flex items-center gap-1.5 text-xs font-bold rounded-lg px-2.5 py-1.5 bg-red-100 hover:bg-red-200 dark:bg-red-900/50 dark:hover:bg-red-900/80 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400');
         retry.type = 'button';
         retry.appendChild(el('i', 'fa-solid fa-rotate-right'));
         retry.appendChild(el('span', '', 'إعادة المحاولة'));
@@ -1960,13 +1988,32 @@
         box.appendChild(retry);
 
         row.appendChild(box);
+        row.appendChild(buildAvatar());
         return row;
+      }
+
+      // اقتراحات أسئلة جاهزة (تظهر فقط قبل أول رسالة)
+      function buildChips() {
+        var wrap = el('div', 'flex flex-wrap justify-end gap-2');
+        wrap.setAttribute('data-chips', '');
+        CHAT_SUGGESTIONS.forEach(function (s) {
+          var b = el('button', 'chip', s);
+          b.type = 'button';
+          b.addEventListener('click', function () {
+            if (chatBusy) return;
+            chatInput.value = s;
+            handleChatSubmit();
+          });
+          wrap.appendChild(b);
+        });
+        return wrap;
       }
 
       function renderChat(item) {
         chatMessages.replaceChildren();
         chatMessages.appendChild(buildBubble('ai', WELCOME_MESSAGE)); // الترحيب لا يُخزَّن
         item.chat.forEach(function (m) { chatMessages.appendChild(buildBubble(m.role, m.text)); });
+        if (!item.chat.length) chatMessages.appendChild(buildChips());
         scrollChatToBottom();
       }
 
@@ -1976,10 +2023,11 @@
 
       function autoResizeChatInput() {
         chatInput.style.height = 'auto';
-        chatInput.style.height = Math.min(chatInput.scrollHeight, 128) + 'px';
+        var h = chatInput.scrollHeight; // 0 إذا كان التبويب مخفياً: نترك الارتفاع الطبيعي
+        chatInput.style.height = h > 0 ? Math.min(h, 128) + 'px' : '';
       }
 
-      // إلغاء أي طلب شات معلّق (عند التنقل بين الملخصات)
+      // إلغاء أي طلب شات معلّق (عند التنقل بين الخلاصات)
       function cancelChat() {
         if (chatAbort) {
           chatAbort.abort();
@@ -1989,13 +2037,23 @@
         updateChatUI();
       }
 
-      // السياق: النص الكامل، وعند غيابه الملخص والنقاط
-      function buildChatContext(item) {
-        if (item.full_transcript) return item.full_transcript;
+      // الخلاصة والنقاط والمهام (قصيرة)، ومعها التفريغ عند الطلب (أول 4000 حرف كحد أقصى)
+      function buildChatContext(item, withTranscript) {
         var parts = [];
-        if (item.executive_summary) parts.push(item.executive_summary);
-        if (item.key_points.length) parts.push(item.key_points.join('\n'));
-        return parts.join('\n');
+        if (item.executive_summary) parts.push('الخلاصة: ' + item.executive_summary);
+        if (item.key_points.length) parts.push('النقاط الرئيسية:\n- ' + item.key_points.join('\n- '));
+        if (item.action_items.length) {
+          parts.push('المهام: ' + item.action_items.slice(0, 15).map(function (t) { return t.task; }).join('، '));
+        }
+        if (withTranscript && item.full_transcript) {
+          var t = item.full_transcript;
+          if (t.length > CHAT_FIRST_TRANSCRIPT_CHARS) {
+            parts.push('التفريغ الصوتي (الجزء الأول):\n' + t.slice(0, CHAT_FIRST_TRANSCRIPT_CHARS) + '…');
+          } else {
+            parts.push('التفريغ الصوتي الكامل:\n' + t);
+          }
+        }
+        return parts.join('\n\n');
       }
 
       // طلب Gemini واحد للشات بمهلة خاصة بهذه الطبقة
@@ -2021,10 +2079,10 @@
       }
 
       // طبقة Groq للشات (نص فقط، بدون وضع JSON)
-      async function chatWithGroq(apiKey, contents, chatCtrl) {
+      async function chatWithGroq(apiKey, contents, chatCtrl, model) {
         var messages = [{
           role: 'system',
-          content: 'أنت مساعد يجيب عن أسئلة حول نص محاضرة أو اجتماع. أجب بالعربية بدقة واختصار وبنص عادي دون رموز Markdown.'
+          content: 'أنت سيزار، مساعد ذكي يجيب عن أسئلة حول محاضرة أو اجتماع. أجب بالعربية بدقة واختصار وبنص عادي دون رموز Markdown.'
         }];
         contents.forEach(function (c) {
           messages.push({ role: c.role === 'model' ? 'assistant' : 'user', content: c.parts[0].text });
@@ -2036,7 +2094,7 @@
             'Authorization': 'Bearer ' + apiKey,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ model: GROQ_CHAT_MODEL, messages: messages, temperature: 0.3 })
+          body: JSON.stringify({ model: model, messages: messages, temperature: 0.3 })
         }, chatCtrl, CHAT_GROQ_TIMEOUT_MS);
 
         var text = res && res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content;
@@ -2045,23 +2103,36 @@
         return text;
       }
 
-      // الشلال للشات: Gemini 3.8 ← Gemini 3.5 Lite ← Groq (أي فشل ينتقل للطبقة التالية بصمت)
-      async function askGemini(item, question, chatCtrl, onStatus) {
+      // شلال الشات: Groq (llama ثم gpt-oss) ← Gemini 3.8 ← Gemini 3.5 Lite. أي فشل ينتقل للتالي بصمت
+      async function askAssistant(item, question, chatCtrl, onStatus) {
         var geminiKey = getKey();
         var groqKey = getGroqKey();
         if (!geminiKey && !groqKey) throw fail('يرجى إدخال مفتاح Gemini أو Groq أولاً: افتح الإعدادات (زر الترس).');
 
-        var context = buildChatContext(item);
-        if (!context) throw fail('لا يوجد نص لهذا التسجيل للإجابة عن أسئلتك.');
+        // السؤال الأول (لا رسائل محفوظة): التفريغ كاملاً. المتابعة: آخر 4 رسائل فقط
+        var isFirst = item.chat.length === 0;
+        var context = isFirst
+          ? buildChatContext(item, true)
+          : (CHAT_FOLLOWUP_GROUNDING ? buildChatContext(item, false) : '');
+        if (isFirst && !context) throw fail('لا يوجد نص لهذا التسجيل للإجابة عن أسئلتك.');
 
         if (navigator.onLine === false) {
           throw fail('لا يوجد اتصال بالإنترنت. تحقق من اتصالك ثم أعد المحاولة.', '', true);
         }
 
-        var prompt =
-          'بناءً على هذا النص الكامل للمحاضرة/الاجتماع: ' + context + '. ' +
-          'أجب عن سؤال المستخدم التالي بدقة واختصار باللغة العربية: ' + question + ' ' +
-          'إذا لم تتوفر الإجابة في النص فاذكر ذلك بوضوح. اكتب الإجابة بنص عادي دون رموز Markdown.';
+        var prompt;
+        if (isFirst) {
+          prompt =
+            'بناءً على هذه المعلومات عن المحاضرة/الاجتماع (الخلاصة والنقاط الرئيسية والمهام والتفريغ الصوتي):\n' +
+            context + '\n\n' +
+            'أجب عن سؤال المستخدم التالي بدقة واختصار باللغة العربية: ' + question + '\n' +
+            'إذا لم تتوفر الإجابة في المعلومات أعلاه فاذكر ذلك بوضوح. اكتب الإجابة بنص عادي دون رموز Markdown.';
+        } else {
+          prompt =
+            (context ? 'تذكير بخلاصة المحاضرة/الاجتماع:\n' + context + '\n\n' : '') +
+            'اعتمد أيضاً على سياق المحادثة السابقة. أجب عن سؤال المستخدم التالي بدقة واختصار باللغة العربية: ' + question + '\n' +
+            'إذا لم تتوفر الإجابة فاذكر ذلك بوضوح. اكتب الإجابة بنص عادي دون رموز Markdown.';
+        }
 
         // آخر التبادلات السابقة كسياق (بتناوب صحيح: مستخدم ثم نموذج)
         var contents = [];
@@ -2077,10 +2148,27 @@
 
         contents.push({ role: 'user', parts: [{ text: prompt }] });
 
-        var body = { contents: contents, generationConfig: { temperature: 0.3 } };
         var lastErr = null;
 
+        // الطبقة الأولى: Groq
+        if (groqKey) {
+          for (var g = 0; g < GROQ_CHAT_MODELS.length; g++) {
+            try {
+              return await chatWithGroq(groqKey, contents, chatCtrl, GROQ_CHAT_MODELS[g]);
+            } catch (err) {
+              if (chatCtrl.signal.aborted || (err && err.name === 'AbortError')) throw err;
+              console.error('Chat Groq model ' + GROQ_CHAT_MODELS[g] + ' failed:', err);
+              lastErr = err;
+              if (err && err.status === 401) break; // المفتاح نفسه مرفوض: لا فائدة من نموذج آخر
+            }
+          }
+        }
+
+        // الطبقة الثانية: Gemini
         if (geminiKey) {
+          if (groqKey && onStatus) onStatus(FALLBACK_TEXT);
+          var body = { contents: contents, generationConfig: { temperature: 0.3 } };
+
           for (var m = 0; m < MODELS.length; m++) {
             var busyRetried = false;
             var timeoutMs = CHAT_GEMINI_TIMEOUT_MS;
@@ -2107,17 +2195,6 @@
           }
         }
 
-        if (groqKey) {
-          if (onStatus && geminiKey) onStatus(GROQ_TEXT); // تغيير الرسالة فقط عند الانتقال من Gemini
-          try {
-            return await chatWithGroq(groqKey, contents, chatCtrl);
-          } catch (err) {
-            if (chatCtrl.signal.aborted || (err && err.name === 'AbortError')) throw err;
-            console.error('Chat Groq failed:', err);
-            lastErr = err;
-          }
-        }
-
         throw lastErr || fail('تعذّر الحصول على رد. حاول مرة أخرى.');
       }
 
@@ -2128,6 +2205,9 @@
         var itemId = item.id;
         chatBusy = true;
         updateChatUI();
+
+        var chips = chatMessages.querySelector('[data-chips]');
+        if (chips) chips.remove();
 
         if (!isRetry) chatMessages.appendChild(buildBubble('user', question));
         var typingRow = buildTyping();
@@ -2141,7 +2221,7 @@
         chatAbort = ctrl;
 
         try {
-          var answer = await askGemini(item, question, ctrl, onStatus);
+          var answer = await askAssistant(item, question, ctrl, onStatus);
           if (ctrl.signal.aborted) return; // أُلغي بسبب التنقل
 
           typingRow.remove();
@@ -2291,7 +2371,7 @@
         L.push('*' + item.title + '*');
 
         if (item.executive_summary) {
-          L.push('', '📝 *الملخص*', item.executive_summary);
+          L.push('', '📝 *الخلاصة*', item.executive_summary);
         }
         if (item.key_points.length) {
           L.push('', '📌 *النقاط الرئيسية*');
@@ -2304,6 +2384,7 @@
             L.push((t.done ? '☑️ ' : '⬜ ') + t.task + (m ? ' (' + m + ')' : ''));
           });
         }
+        L.push('', '✨ سيزار — خلاصة ذكية لصوتك');
         return L.join('\n');
       }
 
@@ -2313,7 +2394,7 @@
         var date = formatDate(item.date);
         if (date) L.push('> تاريخ الإنشاء: ' + date, '');
 
-        L.push('## الملخص التنفيذي', '', item.executive_summary || '_لا يوجد ملخص_', '');
+        L.push('## الخلاصة التنفيذية', '', item.executive_summary || '_لا توجد خلاصة_', '');
 
         L.push('## النقاط الرئيسية', '');
         if (item.key_points.length) {
@@ -2323,7 +2404,7 @@
         }
         L.push('');
 
-        L.push('## المهام', '');
+        L.push('## المهام والقرارات', '');
         if (item.action_items.length) {
           item.action_items.forEach(function (t) {
             var m = metaLine(t);
@@ -2334,7 +2415,8 @@
         }
         L.push('');
 
-        L.push('## النص الكامل', '', item.full_transcript || '_لا يوجد نص_', '');
+        L.push('## التفريغ الصوتي', '', item.full_transcript || '_لا يوجد نص_', '');
+        L.push('---', '_أُعدّت هذه الخلاصة بواسطة سيزار (Caesar)_', '');
         return L.join('\n');
       }
 
@@ -2365,7 +2447,7 @@
 
       function safeFileName(title) {
         var name = String(title || '').replace(/[\\\/:*?"<>|\r\n\t]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 60);
-        return name || 'ملخص';
+        return name || 'خلاصة سيزار';
       }
 
       function downloadTextFile(filename, text, mime) {
@@ -2384,7 +2466,7 @@
       function requireCurrent() {
         flushSave();
         var item = getCurrent();
-        if (!item) showToast('لا يوجد ملخص مفتوح');
+        if (!item) showToast('لا توجد خلاصة مفتوحة');
         return item;
       }
 
@@ -2410,8 +2492,8 @@
         var date = formatDate(item.date);
         if (date) printArea.appendChild(el('p', 'print-date', 'تاريخ الإنشاء: ' + date));
 
-        printArea.appendChild(el('h2', '', 'الملخص التنفيذي'));
-        printArea.appendChild(el('p', '', item.executive_summary || 'لا يوجد ملخص'));
+        printArea.appendChild(el('h2', '', 'الخلاصة التنفيذية'));
+        printArea.appendChild(el('p', '', item.executive_summary || 'لا توجد خلاصة'));
 
         printArea.appendChild(el('h2', '', 'النقاط الرئيسية'));
         if (item.key_points.length) {
@@ -2422,7 +2504,7 @@
           printArea.appendChild(el('p', '', 'لا توجد نقاط'));
         }
 
-        printArea.appendChild(el('h2', '', 'المهام'));
+        printArea.appendChild(el('h2', '', 'المهام والقرارات'));
         if (item.action_items.length) {
           item.action_items.forEach(function (t) {
             var row = el('div', 'print-task');
@@ -2435,8 +2517,9 @@
           printArea.appendChild(el('p', '', 'لا توجد مهام'));
         }
 
-        printArea.appendChild(el('h2', '', 'النص الكامل'));
+        printArea.appendChild(el('h2', '', 'التفريغ الصوتي'));
         printArea.appendChild(el('p', 'print-transcript', item.full_transcript || 'لا يوجد نص'));
+        printArea.appendChild(el('p', 'print-date', 'أُعدّت بواسطة سيزار (Caesar)'));
       }
 
       exportPdfBtn.addEventListener('click', function () {

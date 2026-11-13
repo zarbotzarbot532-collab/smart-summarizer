@@ -26,9 +26,9 @@
 
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>مُلخِّصي الذكي</title>
-  <meta name="description" content="مُلخِّصي الذكي: تطبيق ويب تقدمي لتلخيص المحاضرات والاجتماعات" />
-  <meta name="theme-color" content="#4F46E5" />
+  <title>سيزار | Caesar</title>
+  <meta name="description" content="سيزار (Caesar): خلاصة ذكية لصوتك. تطبيق ويب تقدمي يحوّل المحاضرات والاجتماعات إلى خلاصة ومهام وقرارات." />
+  <meta name="theme-color" content="#0B0B10" />
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.json" />
@@ -40,8 +40,7 @@
     (function () {
       try {
         var saved = localStorage.getItem('theme');
-        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-        if (saved === 'dark' || (!saved && prefersDark)) {
+        if (saved !== 'light') { // الوضع الليلي هو الافتراضي لهوية سيزار
           document.documentElement.classList.add('dark');
         }
       } catch (e) {}
@@ -62,13 +61,21 @@
         extend: {
           fontFamily: { sans: ['Cairo', 'sans-serif'] },
           colors: {
+            // الهوية: أحمر قرمزي (أساسي) وبرتقالي متوهج (للتمييز في الوضع الليلي)
             brand: {
-              50: '#EEF2FF',
-              100: '#E0E7FF',
-              400: '#818CF8',
-              500: '#6366F1',
-              DEFAULT: '#4F46E5',
-              700: '#4338CA'
+              50: '#FFF3EC',
+              100: '#FFE3D3',
+              400: '#FF8A3D',
+              500: '#F2542D',
+              DEFAULT: '#DC2626',
+              700: '#B91C1C'
+            },
+            // درجات داكنة قريبة من الأسود لأسطح الوضع الليلي (الثقب الأسود)
+            slate: {
+              700: '#26262f',
+              800: '#15151c',
+              900: '#0b0b10',
+              950: '#050508'
             }
           }
         }
@@ -83,6 +90,107 @@
     html { -webkit-tap-highlight-color: transparent; }
     body { font-family: 'Cairo', sans-serif; }
     audio { width: 100%; }
+
+    /* ===== هوية سيزار: الثقب الأسود (أسود عميق، قرمزي، برتقالي متوهج) ===== */
+    ::selection { background: rgba(249, 115, 22, .35); }
+
+    .bg-caesar {
+      background-color: #dc2626;
+      background-image: linear-gradient(135deg, #dc2626 0%, #f97316 100%);
+    }
+    .bg-caesar:hover:not(:disabled) { filter: brightness(1.1); }
+    .text-caesar {
+      background-image: linear-gradient(90deg, #ef4444 0%, #f97316 55%, #fbbf24 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: transparent;
+    }
+    .glow-caesar { box-shadow: 0 10px 28px -8px rgba(249, 115, 22, .6); }
+
+    @keyframes bhPulse {
+      0%, 100% { filter: drop-shadow(0 0 10px rgba(249, 115, 22, .45)); }
+      50% { filter: drop-shadow(0 0 24px rgba(239, 68, 68, .85)); }
+    }
+    .bh-pulse { animation: bhPulse 4s ease-in-out infinite; }
+    .bh-glow { filter: drop-shadow(0 0 8px rgba(249, 115, 22, .6)); }
+
+    /* توهج خفيف في زوايا الصفحة */
+    .ambient { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+    .ambient::before, .ambient::after { content: ''; position: absolute; border-radius: 9999px; filter: blur(90px); }
+    .ambient::before { width: 26rem; height: 26rem; top: -10rem; right: -9rem; background: #dc2626; opacity: .10; }
+    .ambient::after { width: 24rem; height: 24rem; bottom: -11rem; left: -9rem; background: #f97316; opacity: .08; }
+    .dark .ambient::before { opacity: .17; }
+    .dark .ambient::after { opacity: .12; }
+
+    /* زر التسجيل أثناء التسجيل الفعلي */
+    .rec-live { background: #000; box-shadow: 0 0 0 3px #ef4444, 0 0 38px 6px rgba(239, 68, 68, .5); }
+
+    /* ===== واجهة الشات ===== */
+    .chat-shell { background: linear-gradient(180deg, #ffffff 0%, #fff6f1 100%); }
+    .dark .chat-shell { background: #111827; }
+    .chat-glow { position: absolute; width: 16rem; height: 16rem; border-radius: 9999px; filter: blur(72px); pointer-events: none; }
+    .chat-glow-a { top: -6rem; right: -6rem; background: #dc2626; opacity: .13; }
+    .chat-glow-b { bottom: -7rem; left: -6rem; background: #f97316; opacity: .12; }
+    .dark .chat-glow-a { opacity: .20; }
+    .dark .chat-glow-b { opacity: .16; }
+
+    .caesar-avatar {
+      width: 40px; height: 40px; flex: none; border-radius: 9999px; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(circle at 50% 50%, #1c0b05 0%, #000 72%);
+      box-shadow: 0 0 0 1px rgba(251, 146, 60, .55), 0 0 16px 2px rgba(249, 115, 22, .45);
+    }
+    .caesar-avatar svg { width: 150%; height: 150%; flex: none; }
+
+    .bubble-ai {
+      background: #1e293b; color: #e2e8f0;
+      border: 1px solid rgba(255, 255, 255, .07);
+      box-shadow: 0 6px 18px -10px rgba(0, 0, 0, .6);
+    }
+
+    /* شريط الإدخال العائم (زجاجي) */
+    .glass-bar {
+      background: rgba(255, 255, 255, .78);
+      border: 1px solid rgba(0, 0, 0, .08);
+      box-shadow: 0 10px 30px -12px rgba(0, 0, 0, .3);
+      -webkit-backdrop-filter: blur(16px) saturate(1.4);
+      backdrop-filter: blur(16px) saturate(1.4);
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .dark .glass-bar {
+      background: rgba(255, 255, 255, .07);
+      border: 1px solid rgba(255, 255, 255, .14);
+      box-shadow: 0 10px 34px -10px rgba(0, 0, 0, .75);
+    }
+    .glass-bar:focus-within {
+      border-color: rgba(249, 115, 22, .7);
+      box-shadow: 0 0 0 3px rgba(249, 115, 22, .18), 0 10px 30px -10px rgba(249, 115, 22, .45);
+    }
+
+    /* مؤشر الكتابة: ثلاث نقاط تنبض */
+    @keyframes typingPulse {
+      0%, 80%, 100% { transform: scale(.55); opacity: .35; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+    .typing-dot {
+      width: 8px; height: 8px; border-radius: 9999px; background: #fb923c;
+      animation: typingPulse 1.2s ease-in-out infinite;
+    }
+
+    /* اقتراحات الأسئلة */
+    .chip {
+      font-size: .8rem; font-weight: 600; padding: .4rem .85rem; border-radius: 9999px;
+      color: #c2410c; background: rgba(249, 115, 22, .09); border: 1px solid rgba(249, 115, 22, .35);
+      transition: background .2s, transform .1s;
+    }
+    .chip:hover { background: rgba(249, 115, 22, .18); }
+    .chip:active { transform: scale(.97); }
+    .dark .chip { color: #fdba74; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .bh-pulse, .typing-dot { animation: none; }
+    }
 
     /* ===== الطباعة / تصدير PDF: يُطبع محتوى النتيجة فقط، أبيض وأسود، RTL ===== */
     @media print {
@@ -136,7 +244,44 @@
   </style>
 </head>
 
-<body class="min-h-screen bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300">
+<body class="min-h-screen bg-[#faf7f5] text-slate-800 dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- رمز الثقب الأسود (شعار سيزار): قرص تراكمي برتقالي حول أفق أسود -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <radialGradient id="bhHalo" cx="50%" cy="50%" r="50%">
+        <stop offset="0.30" stop-color="#000" stop-opacity="0" />
+        <stop offset="0.48" stop-color="#f97316" stop-opacity=".5" />
+        <stop offset="0.72" stop-color="#dc2626" stop-opacity=".16" />
+        <stop offset="1" stop-color="#dc2626" stop-opacity="0" />
+      </radialGradient>
+      <linearGradient id="bhDisk" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#b91c1c" stop-opacity="0" />
+        <stop offset=".2" stop-color="#dc2626" stop-opacity=".9" />
+        <stop offset=".5" stop-color="#fde68a" />
+        <stop offset=".8" stop-color="#f97316" stop-opacity=".9" />
+        <stop offset="1" stop-color="#f97316" stop-opacity="0" />
+      </linearGradient>
+      <linearGradient id="bhRing" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fde68a" />
+        <stop offset=".45" stop-color="#f97316" />
+        <stop offset="1" stop-color="#b91c1c" />
+      </linearGradient>
+      <symbol id="bh" viewBox="0 0 64 64">
+        <circle cx="32" cy="32" r="31" fill="url(#bhHalo)" />
+        <circle cx="32" cy="32" r="16.6" fill="none" stroke="url(#bhRing)" stroke-width="3" />
+        <g transform="rotate(-14 32 32)">
+          <ellipse cx="32" cy="32" rx="29.5" ry="4.6" fill="none" stroke="url(#bhDisk)" stroke-width="2.2" />
+        </g>
+        <circle cx="32" cy="32" r="15.2" fill="#000" />
+        <g transform="rotate(-14 32 32)">
+          <path d="M2.5 32 A29.5 4.6 0 0 0 61.5 32" fill="none" stroke="url(#bhDisk)" stroke-width="3.4" />
+        </g>
+      </symbol>
+    </defs>
+  </svg>
+  <div class="ambient" aria-hidden="true"></div>
+
 
   <!-- ========== الشريط العلوي ========== -->
   <header class="sticky top-0 z-30 bg-white/90 dark:bg-slate-800/90 backdrop-blur border-b border-slate-200 dark:border-slate-700">
@@ -149,11 +294,12 @@
           <i class="fa-solid fa-bars text-lg" aria-hidden="true"></i>
         </button>
 
-        <a href="./" class="flex items-center gap-2 select-none" aria-label="مُلخِّصي الذكي">
-          <span class="w-9 h-9 rounded-xl bg-brand text-white flex items-center justify-center shadow">
-            <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+        <a href="./" class="flex items-center gap-2 select-none" aria-label="سيزار Caesar">
+          <svg class="w-10 h-10 bh-glow" viewBox="0 0 64 64" aria-hidden="true"><use href="#bh" /></svg>
+          <span class="hidden min-[360px]:flex flex-col leading-none">
+            <span class="font-extrabold text-xl text-caesar">سيزار</span>
+            <span dir="ltr" class="text-[9px] tracking-[.32em] uppercase text-slate-400 dark:text-slate-500 mt-0.5 text-right">Caesar</span>
           </span>
-          <span class="hidden min-[400px]:inline font-extrabold text-lg text-brand dark:text-brand-400">مُلخِّصي الذكي</span>
         </a>
       </div>
 
@@ -185,15 +331,15 @@
   <!-- ========== الخلفية المعتمة للقائمة الجانبية ========== -->
   <div id="overlay" class="fixed inset-0 z-40 bg-black/50 opacity-0 pointer-events-none transition-opacity duration-300" aria-hidden="true"></div>
 
-  <!-- ========== القائمة الجانبية (سجل الملخصات) ========== -->
+  <!-- ========== القائمة الجانبية (سجل الخلاصات) ========== -->
   <aside id="sidebar"
     class="fixed top-0 right-0 z-50 h-full w-72 max-w-[85%] bg-white dark:bg-slate-800 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col translate-x-full invisible transition-[transform,visibility] duration-300"
-    aria-label="سجل الملخصات" aria-hidden="true">
+    aria-label="سجل الخلاصات" aria-hidden="true">
 
     <div class="flex items-center justify-between px-4 h-16 shrink-0 border-b border-slate-200 dark:border-slate-700">
       <h2 class="font-bold text-lg flex items-center gap-2">
         <i class="fa-solid fa-clock-rotate-left text-brand dark:text-brand-400" aria-hidden="true"></i>
-        سجل الملخصات
+        سجل الخلاصات
       </h2>
       <button id="closeSidebarBtn" type="button"
         class="w-10 h-10 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
@@ -222,11 +368,12 @@
     <div id="homeView" class="space-y-6">
 
       <section class="text-center px-2 pt-2">
-        <h1 class="text-2xl sm:text-3xl font-extrabold leading-snug mb-3">
-          حوِّل محاضراتك واجتماعاتك إلى <span class="text-brand dark:text-brand-400">معرفة منظمة</span>
+        <svg class="mx-auto w-28 h-28 mb-2 bh-pulse" viewBox="0 0 64 64" aria-hidden="true"><use href="#bh" /></svg>
+        <h1 class="text-2xl sm:text-4xl font-extrabold leading-snug mb-3">
+          <span class="text-caesar">سيزار</span>: خلاصة ذكية لصوتك
         </h1>
         <p class="text-slate-500 dark:text-slate-400 leading-relaxed max-w-xl mx-auto">
-          سجّل صوتك مباشرة أو ارفع ملفاً صوتياً، ثم اختر نمط التلخيص المناسب لك.
+          سجّل صوتك أو ارفع ملفاً، وسيستخلص لك سيزار الخلاصة والمهام والقرارات في ثوانٍ.
         </p>
       </section>
 
@@ -263,7 +410,7 @@
             <div class="relative">
               <span id="pulseRing" class="hidden absolute inset-0 rounded-full bg-red-500/40 animate-ping" aria-hidden="true"></span>
               <button id="recordBtn" type="button"
-                class="relative w-24 h-24 rounded-full bg-brand hover:bg-brand-700 text-white shadow-lg flex items-center justify-center transition active:scale-95 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand-400 disabled:opacity-60"
+                class="relative w-24 h-24 rounded-full bg-caesar glow-caesar text-white flex items-center justify-center transition active:scale-95 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand-400 disabled:opacity-60"
                 aria-label="بدء التسجيل">
                 <i id="recordIcon" class="fa-solid fa-microphone text-3xl" aria-hidden="true"></i>
               </button>
@@ -277,7 +424,7 @@
           <div id="recordResult" class="hidden border-t border-slate-200 dark:border-slate-700 pt-4 space-y-3">
             <audio id="audioPreview" controls preload="metadata"></audio>
             <button id="summarizeRecordBtn" type="button"
-              class="w-full flex items-center justify-center gap-2 rounded-xl bg-brand hover:bg-brand-700 text-white font-bold py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
+              class="w-full flex items-center justify-center gap-2 rounded-xl bg-caesar glow-caesar text-white font-bold py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
               <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
               لخّص التسجيل الآن
             </button>
@@ -327,7 +474,7 @@
               </div>
 
               <button id="summarizeFileBtn" type="button"
-                class="w-full flex items-center justify-center gap-2 rounded-xl bg-brand hover:bg-brand-700 text-white font-bold py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
+                class="w-full flex items-center justify-center gap-2 rounded-xl bg-caesar glow-caesar text-white font-bold py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
                 <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
                 لخّص الملف الآن
               </button>
@@ -348,7 +495,7 @@
 
       <!-- العنوان القابل للتعديل + شريط التصدير -->
       <div class="rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm p-5">
-        <label for="titleInput" class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">عنوان الملخص</label>
+        <label for="titleInput" class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">عنوان الخلاصة</label>
         <input id="titleInput" type="text" maxlength="150" dir="auto"
           class="w-full bg-transparent text-xl font-extrabold border-b-2 border-slate-200 dark:border-slate-700 focus:border-brand focus:outline-none py-1 transition" />
         <p id="summaryDate" class="mt-2 text-xs text-slate-400 dark:text-slate-500"></p>
@@ -371,22 +518,22 @@
       </div>
 
       <!-- الأزرار (Tabs) -->
-      <div class="grid grid-cols-4 gap-1 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1" role="tablist" aria-label="أقسام النتيجة">
+      <div class="grid grid-cols-4 gap-1 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 p-1" role="tablist" aria-label="أقسام الخلاصة">
         <button type="button" role="tab" data-tab="summary" aria-selected="true" aria-controls="panel-summary"
-          class="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl py-2.5 text-sm font-bold transition bg-brand text-white shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
-          <i class="fa-solid fa-align-right" aria-hidden="true"></i><span>الملخص</span>
+          class="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl py-2.5 px-0.5 text-[11px] sm:text-sm leading-tight text-center font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 bg-caesar text-white shadow">
+          <i class="fa-solid fa-align-right" aria-hidden="true"></i><span>الخلاصة</span>
         </button>
         <button type="button" role="tab" data-tab="tasks" aria-selected="false" aria-controls="panel-tasks"
-          class="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl py-2.5 text-sm font-bold transition text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
-          <i class="fa-solid fa-list-check" aria-hidden="true"></i><span>المهام</span>
+          class="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl py-2.5 px-0.5 text-[11px] sm:text-sm leading-tight text-center font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+          <i class="fa-solid fa-list-check" aria-hidden="true"></i><span>المهام والقرارات</span>
         </button>
         <button type="button" role="tab" data-tab="transcript" aria-selected="false" aria-controls="panel-transcript"
-          class="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl py-2.5 text-sm font-bold transition text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
-          <i class="fa-solid fa-file-lines" aria-hidden="true"></i><span>النص</span>
+          class="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl py-2.5 px-0.5 text-[11px] sm:text-sm leading-tight text-center font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+          <i class="fa-solid fa-file-lines" aria-hidden="true"></i><span>التفريغ الصوتي</span>
         </button>
         <button type="button" role="tab" data-tab="chat" aria-selected="false" aria-controls="panel-chat"
-          class="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl py-2.5 text-sm font-bold transition text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
-          <i class="fa-solid fa-comments" aria-hidden="true"></i><span>شات</span>
+          class="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl py-2.5 px-0.5 text-[11px] sm:text-sm leading-tight text-center font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+          <i class="fa-solid fa-comments" aria-hidden="true"></i><span>تحدث مع سيزار</span>
         </button>
       </div>
 
@@ -403,7 +550,7 @@
           <input id="taskInput" type="text" maxlength="200" dir="auto" placeholder="أضف مهمة جديدة..."
             class="flex-1 min-w-0 bg-transparent px-3 py-2 placeholder-slate-400 focus:outline-none" />
           <button type="submit"
-            class="shrink-0 flex items-center gap-2 rounded-xl bg-brand hover:bg-brand-700 text-white font-bold px-4 py-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
+            class="shrink-0 flex items-center gap-2 rounded-xl bg-caesar glow-caesar text-white font-bold px-4 py-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
             <i class="fa-solid fa-plus text-sm" aria-hidden="true"></i>
             إضافة
           </button>
@@ -412,17 +559,26 @@
 
       <div id="panel-transcript" data-panel="transcript" role="tabpanel" class="hidden space-y-4"></div>
 
-      <!-- ===== تبويب الشات ===== -->
+      <!-- ===== تبويب الشات (تحدث مع سيزار) ===== -->
       <div id="panel-chat" data-panel="chat" role="tabpanel" class="hidden">
-        <div class="flex flex-col rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+        <div class="chat-shell relative flex flex-col overflow-hidden rounded-3xl border border-slate-200 dark:border-white/10 shadow-sm">
+          <span class="chat-glow chat-glow-a" aria-hidden="true"></span>
+          <span class="chat-glow chat-glow-b" aria-hidden="true"></span>
 
-          <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-200 dark:border-slate-700">
-            <h3 class="flex items-center gap-2 font-bold">
-              <i class="fa-regular fa-comments text-brand dark:text-brand-400" aria-hidden="true"></i>
-              اسأل عن هذا التسجيل
-            </h3>
+          <!-- رأس الشات -->
+          <div class="relative z-10 flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-200/80 dark:border-white/10">
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="caesar-avatar" aria-hidden="true"><svg viewBox="0 0 64 64"><use href="#bh" /></svg></span>
+              <div class="leading-tight min-w-0">
+                <h3 class="font-extrabold">سيزار</h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 truncate">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" aria-hidden="true"></span>
+                  مساعدك الذكي لهذا التسجيل
+                </p>
+              </div>
+            </div>
             <button id="chatClearBtn" type="button"
-              class="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+              class="w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
               aria-label="مسح المحادثة" title="مسح المحادثة">
               <i class="fa-regular fa-trash-can text-sm" aria-hidden="true"></i>
             </button>
@@ -430,17 +586,17 @@
 
           <!-- منطقة الرسائل -->
           <div id="chatMessages" role="log" aria-live="polite" aria-label="رسائل المحادثة"
-            class="h-[55vh] min-h-[16rem] max-h-[32rem] overflow-y-auto p-4 space-y-3 bg-slate-50/60 dark:bg-slate-900/40"></div>
+            class="relative z-10 h-[60vh] min-h-[20rem] max-h-[36rem] overflow-y-auto px-3 sm:px-4 pt-4 pb-24 space-y-4"></div>
 
-          <!-- حقل الإدخال -->
+          <!-- شريط الإدخال العائم -->
           <form id="chatForm" autocomplete="off"
-            class="flex items-end gap-2 p-3 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            class="glass-bar absolute z-20 inset-x-3 bottom-3 flex items-end gap-2 p-2 rounded-[28px]">
             <label for="chatInput" class="sr-only">اكتب سؤالك</label>
-            <textarea id="chatInput" rows="1" maxlength="1000" dir="auto" placeholder="اكتب سؤالك عن التسجيل..."
-              class="flex-1 min-w-0 resize-none rounded-2xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-400 px-4 py-2.5 text-sm leading-relaxed max-h-32 focus:outline-none focus:ring-2 focus:ring-brand"></textarea>
+            <textarea id="chatInput" rows="1" maxlength="1000" dir="auto" placeholder="اسأل سيزار عن هذا التسجيل..."
+              class="flex-1 min-w-0 resize-none bg-transparent text-slate-800 dark:text-slate-100 placeholder-slate-400 px-3 py-2 text-base leading-6 max-h-32 focus:outline-none"></textarea>
             <button id="chatSendBtn" type="submit" aria-label="إرسال"
-              class="w-11 h-11 shrink-0 rounded-full bg-brand hover:bg-brand-700 text-white flex items-center justify-center transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:opacity-50 disabled:cursor-not-allowed">
-              <i class="fa-solid fa-paper-plane -scale-x-100" aria-hidden="true"></i>
+              class="w-10 h-10 shrink-0 rounded-full bg-caesar glow-caesar text-white flex items-center justify-center transition active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:opacity-50 disabled:cursor-not-allowed">
+              <i class="fa-solid fa-arrow-up" aria-hidden="true"></i>
             </button>
           </form>
         </div>
@@ -523,7 +679,7 @@
 
         <div class="flex gap-2 pt-1">
           <button type="submit"
-            class="flex-1 flex items-center justify-center gap-2 rounded-xl bg-brand hover:bg-brand-700 text-white font-bold py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
+            class="flex-1 flex items-center justify-center gap-2 rounded-xl bg-caesar glow-caesar text-white font-bold py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
             <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>
             حفظ
           </button>
@@ -547,7 +703,10 @@
 
     <!-- الحالة: قيد المعالجة -->
     <div id="loadingBusy" class="flex flex-col items-center gap-5 w-full max-w-xs">
-      <i class="fa-solid fa-circle-notch fa-spin text-5xl" aria-hidden="true"></i>
+      <div class="relative w-28 h-28" aria-hidden="true">
+        <span class="absolute inset-0 rounded-full border-[3px] border-orange-500/20 border-t-orange-500 animate-spin"></span>
+        <svg class="absolute inset-2 w-24 h-24 bh-pulse" viewBox="0 0 64 64"><use href="#bh" /></svg>
+      </div>
       <p id="loadingText" class="font-bold text-lg min-h-[3.5rem] flex items-center justify-center">جاري تجهيز الصوت...</p>
 
       <div class="flex gap-1.5 w-full" aria-hidden="true">
@@ -573,7 +732,7 @@
 
     <div class="flex items-center justify-center gap-3 flex-wrap">
       <button id="retryBtn" type="button"
-        class="hidden items-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold px-5 py-2.5 text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white">
+        class="hidden items-center gap-2 rounded-xl bg-caesar glow-caesar text-white font-bold px-5 py-2.5 text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white">
         <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
         إعادة المحاولة يدوياً
       </button>
@@ -592,6 +751,6 @@
   <!-- ========== منطقة الطباعة (مخفية على الشاشة، تظهر عند تصدير PDF) ========== -->
   <div id="printArea" class="hidden" dir="rtl" aria-hidden="true"></div>
 
-  <script src="app.js?v=12"></script>
+  <script src="app.js?v=14"></script>
 </body>
 </html>
