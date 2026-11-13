@@ -301,8 +301,20 @@
         return pad(Math.floor(totalSeconds / 60)) + ':' + pad(totalSeconds % 60);
       }
 
+      var MAX_RECORD_SECONDS = 10 * 60; // الحد الأقصى للتسجيل: 10 دقائق
+      var MAX_RECORD_TEXT = 'وصلت للحد الأقصى (10 دقائق). يمكنك تلخيص هذا الجزء، ثم تسجيل الجزء التالي.';
+      var autoStopped = false;
+
       function updateTimer() {
-        timerEl.textContent = formatTime(Math.floor((Date.now() - startTime) / 1000));
+        var secs = Math.floor((Date.now() - startTime) / 1000);
+        if (secs > MAX_RECORD_SECONDS) secs = MAX_RECORD_SECONDS;
+        timerEl.textContent = formatTime(secs);
+        if (isRecording && secs >= MAX_RECORD_SECONDS) {
+          // وصل العداد إلى 10:00: إيقاف تلقائي مع رسالة
+          autoStopped = true;
+          showToast(MAX_RECORD_TEXT, 9000);
+          stopRecording();
+        }
       }
 
       function startTimer() {
@@ -387,6 +399,7 @@
         releaseStream();
 
         if (!chunks.length) {
+          autoStopped = false;
           recordStatus.textContent = 'اضغط على الميكروفون لبدء التسجيل';
           showToast('التسجيل فارغ، حاول مرة أخرى');
           return;
@@ -397,7 +410,8 @@
         audioUrl = URL.createObjectURL(recordedBlob);
         audioPreview.src = audioUrl;
         recordResult.classList.remove('hidden');
-        recordStatus.textContent = 'تم إيقاف التسجيل. يمكنك المعاينة أو التلخيص';
+        recordStatus.textContent = autoStopped ? MAX_RECORD_TEXT : 'تم إيقاف التسجيل. يمكنك المعاينة أو التلخيص';
+        autoStopped = false;
       }
 
       async function startRecording() {
@@ -422,7 +436,10 @@
 
         try {
           var mime = pickMimeType();
-          recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+          // 64 كيلوبت/ث تكفي للكلام، وتضمن أن 10 دقائق تبقى أقل بكثير من 10 ميجابايت
+          var recOpts = { audioBitsPerSecond: 64000 };
+          if (mime) recOpts.mimeType = mime;
+          recorder = new MediaRecorder(stream, recOpts);
         } catch (err) {
           releaseStream();
           showToast('تعذّر تهيئة المسجّل الصوتي');
@@ -432,6 +449,7 @@
         }
 
         chunks = [];
+        autoStopped = false;
         clearRecording();
 
         recorder.addEventListener('dataavailable', function (e) {
@@ -455,7 +473,7 @@
 
       function stopRecording() {
         if (!recorder || recorder.state === 'inactive') return;
-        recordedSeconds = (Date.now() - startTime) / 1000;
+        recordedSeconds = Math.min((Date.now() - startTime) / 1000, MAX_RECORD_SECONDS);
         setRecordingUI(false);
         stopTimer();
         recorder.stop();
@@ -481,6 +499,7 @@
 
       /* ====== رفع ملف صوتي ====== */
       var MAX_SIZE = 10 * 1024 * 1024; // 10 ميجابايت
+      var FILE_TOO_BIG_TEXT = 'الملف كبير جداً (يتجاوز 10 ميجابايت). يرجى تقطيعه إلى أجزاء أصغر.';
       var ALLOWED_EXT = ['mp3', 'wav', 'm4a', 'ogg', 'webm'];
       var EXT_MIME = {
         mp3: 'audio/mp3',
@@ -519,7 +538,7 @@
           return;
         }
         if (file.size > MAX_SIZE) {
-          showToast('حجم الملف كبير. الحد الأقصى 10 ميجابايت');
+          showToast(FILE_TOO_BIG_TEXT, 8000);
           fileInput.value = '';
           return;
         }
@@ -682,8 +701,8 @@
 
       /* ====== تحويل الصوت إلى WAV (16000 هرتز، Mono) ====== */
       var WAV_RATE = 16000;
-      var MAX_WAV_BYTES = 14 * 1024 * 1024; // نحو 7 دقائق
-      var MAX_WAV_SECONDS = Math.floor((MAX_WAV_BYTES - 44) / (WAV_RATE * 2));
+      var MAX_WAV_BYTES = 14 * 1024 * 1024; // سقف حجم WAV المرسل إلى Gemini (حد الطلب 20MB بعد base64)
+      var MIN_WAV_RATE = 8000;              // أدنى معدل عينات عند الحاجة لتقليص التسجيلات الطويلة
 
       // true = تحويل كل الملفات إلى WAV، false = تحويل webm و m4a والتسجيلات فقط
       var ALWAYS_CONVERT_TO_WAV = false;
@@ -703,11 +722,11 @@
         try { if (ctx && ctx.close) ctx.close().catch(function () {}); } catch (e) {}
       }
 
-      async function resampleToMono16k(decoded) {
+      async function resampleToMono(decoded, rate) {
         var OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
         if (!OfflineCtx) throw fail('المتصفح لا يدعم تحويل الصوت إلى WAV.');
-        var frames = Math.ceil(decoded.duration * WAV_RATE);
-        var offline = new OfflineCtx(1, frames, WAV_RATE);
+        var frames = Math.ceil(decoded.duration * rate);
+        var offline = new OfflineCtx(1, frames, rate);
         var source = offline.createBufferSource();
         source.buffer = decoded;
         source.connect(offline.destination);
@@ -739,8 +758,8 @@
         view.setUint32(16, 16, true);
         view.setUint16(20, 1, true);
         view.setUint16(22, 1, true);
-        view.setUint32(24, WAV_RATE, true);
-        view.setUint32(28, WAV_RATE * 2, true);
+        view.setUint32(24, ab.sampleRate, true);
+        view.setUint32(28, ab.sampleRate * 2, true);
         view.setUint16(32, 2, true);
         view.setUint16(34, 16, true);
         writeStr(36, 'data');
@@ -784,14 +803,18 @@
 
         if (!decoded.length) throw fail('الصوت فارغ');
 
-        var estimatedFrames = Math.ceil(decoded.duration * WAV_RATE);
-        if (44 + estimatedFrames * 2 > MAX_WAV_BYTES) {
-          throw fail('الصوت طويل جداً بعد التحويل (الحد الأقصى نحو 7 دقائق). جرّب تسجيلاً أقصر.');
+        // 16 كيلوهرتز عادةً. للتسجيلات الطويلة (حتى 10 دقائق) يُخفَّض المعدل ليبقى الحجم ضمن حد Gemini
+        var rate = WAV_RATE;
+        if (44 + Math.ceil(decoded.duration * rate) * 2 > MAX_WAV_BYTES) {
+          rate = Math.floor((MAX_WAV_BYTES - 44) / (decoded.duration * 2));
+          if (rate < MIN_WAV_RATE) {
+            throw fail('الصوت طويل جداً للتحويل (الحد الأقصى نحو 15 دقيقة). جرّب مقطعاً أقصر.');
+          }
         }
 
         var finalBuf = decoded;
-        if (decoded.sampleRate !== WAV_RATE) {
-          finalBuf = await resampleToMono16k(decoded);
+        if (decoded.sampleRate !== rate) {
+          finalBuf = await resampleToMono(decoded, rate);
         }
         decoded = null;
 
@@ -799,7 +822,7 @@
       }
 
       /* ====== محرك Gemini ====== */
-      // نظام الاحتياط الصامت: تُجرَّب النماذج بالترتيب
+      // الطبقتان 4 و 5: Gemini (يفهم الصوت مباشرة). تُجرَّب النماذج بالترتيب
       var MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
       var ATTEMPT_TIMEOUT_MS = 45000;          // مهلة كل نموذج
       var BUSY_RETRY_DELAY_MS = 2000;          // عند 503 من النموذج الأول: انتظار ثانيتين
@@ -807,13 +830,16 @@
       var FALLBACK_STATUSES = [503, 429];      // أخطاء تنقلنا للنموذج التالي بصمت
       var FALLBACK_TEXT = 'الخوادم مزدحمة، جاري استخدام النموذج الاحتياطي...';
 
-      // الطبقة الثالثة: Groq (تفريغ صوتي ثم تلخيص نصي)
+      // الطبقات 1 إلى 3: Groq (Whisper للتفريغ ثم Llama للتلخيص حسب الطول)
       var GROQ_STT_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
       var GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
-      var GROQ_STT_MODEL = 'whisper-large-v3-turbo';
-      var GROQ_CHAT_MODEL = 'openai/gpt-oss-120b';
-      var GROQ_TIMEOUT_MS = 60000;             // مهلة كل خطوة من خطوتي Groq
-      var GROQ_TEXT = 'جاري استخدام النموذج الاحتياطي السريع...';
+      var GROQ_STT_MODEL = 'whisper-large-v3-turbo';          // الطبقة 1: تحويل الصوت إلى نص
+      var GROQ_FAST_MODEL = 'llama-3.1-8b-instant';           // التوجيه الذكي: نص قصير = سرعة قصوى
+      var GROQ_QUALITY_MODEL = 'llama-3.3-70b-versatile';     // التوجيه الذكي: نص طويل = جودة أعلى
+      var SHORT_AUDIO_SECONDS = 30;            // أقل من 30 ثانية صوتية = قصير
+      var SHORT_TRANSCRIPT_CHARS = 450;        // بديل عند غياب المدة: نحو 30 ثانية كلاماً بالعربية
+      var GROQ_STT_TIMEOUT_MS = 45000;         // مهلة Whisper
+      var GROQ_SUMMARY_TIMEOUT_MS = 30000;     // مهلة Llama في التلخيص
       var AUDIO_EXT = {
         'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/wave': 'wav',
         'audio/mp3': 'mp3', 'audio/mpeg': 'mp3',
@@ -1093,7 +1119,7 @@
         // في النموذج الاحتياطي يبقى نص "الخوادم مزدحمة..." ظاهراً
 
         try {
-          return await callGemini(apiKey, data.base64, data.mime, ctrl.signal, model);
+          return await callGemini(apiKey, data.base64, data.gmime, ctrl.signal, model);
         } catch (e) {
           if (e && e.name === 'AbortError' && timedOut && !runCtrl.signal.aborted) {
             var te = fail('انتهت مهلة الطلب. الخوادم بطيئة أو الملف طويل.',
@@ -1199,26 +1225,42 @@
         'اكتب كل المحتوى بالعربية الفصحى المبسطة. إذا لم تُذكر مهام فأعد action_items كمصفوفة فارغة، ' +
         'وإذا لم يُذكر المسؤول أو الموعد لمهمة ما فاكتب "غير محدد".';
 
-      // التفريغ الصوتي (Whisper) ثم التلخيص (Llama). full_transcript يأتي من Whisper مباشرة
-      async function summarizeWithGroq(blob, apiKey, runCtrl, mime) {
-        // الخطوة أ: تحويل الصوت إلى نص
-        var ext = AUDIO_EXT[baseMime(mime || blob.type)] || 'webm';
+      // اختيار نموذج التلخيص: أقل من 30 ثانية صوتية = 8b السريع، غير ذلك = 70b الأقوى
+      function pickSummaryModel(seconds, transcript) {
+        var short = seconds > 0 ? seconds < SHORT_AUDIO_SECONDS : transcript.length < SHORT_TRANSCRIPT_CHARS;
+        return short ? GROQ_FAST_MODEL : GROQ_QUALITY_MODEL;
+      }
+
+      // الطبقات 1 إلى 3: Whisper للتفريغ، ثم Llama (يُختار حسب الطول) للتلخيص. full_transcript يأتي من Whisper مباشرة
+      async function summarizeWithGroq(data, apiKey, runCtrl) {
+        var blob = data.blob;
+
+        // الخطوة أ: تحويل الصوت إلى نص (verbose_json ليعيد مدة الصوت الحقيقية)
+        var ext = AUDIO_EXT[baseMime(data.mime || blob.type)] || 'webm';
         var fd = new FormData();
         fd.append('file', blob, 'audio.' + ext);
         fd.append('model', GROQ_STT_MODEL);
         fd.append('language', 'ar');
-        fd.append('response_format', 'json');
+        fd.append('response_format', 'verbose_json');
         fd.append('temperature', '0');
 
         var stt = await groqFetch(GROQ_STT_URL, {
           method: 'POST',
           headers: { 'Authorization': 'Bearer ' + apiKey }, // بدون Content-Type: المتصفح يضبطه مع FormData
           body: fd
-        }, runCtrl, GROQ_TIMEOUT_MS);
+        }, runCtrl, GROQ_STT_TIMEOUT_MS);
 
         var transcript = str(stt && stt.text);
         if (!transcript) throw fail('لم يتمكن Groq من استخراج نص من الصوت (قد يكون صامتاً).');
         guard(runCtrl);
+
+        // التوجيه الذكي: المدة من Whisper، ثم مدة التسجيل، ثم طول النص كبديل أخير
+        var seconds = Number(stt && stt.duration);
+        if (!(seconds > 0)) seconds = Number(data.seconds);
+        var model = pickSummaryModel(seconds > 0 ? seconds : 0, transcript);
+
+        clearStageTimer();
+        setStage(2);
 
         // الخطوة ب: تلخيص النص إلى JSON
         var styleHint = STYLE_HINTS[styleSelect.value] || '';
@@ -1229,7 +1271,7 @@
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            model: GROQ_CHAT_MODEL,
+            model: model,
             messages: [
               { role: 'system', content: GROQ_SYSTEM_PROMPT + '\n' + styleHint },
               { role: 'user', content: 'النص المفرَّغ:\n' + transcript }
@@ -1237,7 +1279,7 @@
             response_format: { type: 'json_object' },
             temperature: 0.2
           })
-        }, runCtrl, GROQ_TIMEOUT_MS);
+        }, runCtrl, GROQ_SUMMARY_TIMEOUT_MS);
 
         var content = chat && chat.choices && chat.choices[0] && chat.choices[0].message && chat.choices[0].message.content;
         if (!content) throw fail('لم يُرجع Groq أي نتيجة. حاول مرة أخرى.');
@@ -1267,83 +1309,123 @@
         showToast('تم التلخيص بنجاح');
       }
 
-      // الدرع الثلاثي: Gemini 3.8 ← Gemini 3.5 Lite ← Groq. شاشة التحميل تبقى مفتوحة بين الطبقات
+      // تجهيز الصوت لـ Gemini (تحويل WAV عند الحاجة ثم base64). يتم مرة واحدة فقط ويُحفظ للمحاولات التالية
+      async function prepareGeminiPayload(data, ctrl) {
+        if (data.base64) return;
+        var sendBlob = data.blob;
+        var sendMime = data.mime;
+        if (needsConversion(data.mime)) {
+          sendBlob = await convertToWav(data.blob);
+          sendMime = 'audio/wav';
+          guard(ctrl);
+        }
+        var b64 = await blobToBase64(sendBlob);
+        guard(ctrl);
+        data.gmime = sendMime;
+        data.base64 = b64;
+      }
+
+      // الدرع الخماسي. شاشة التحميل تبقى مفتوحة بين الطبقات، والخطأ النهائي لا يظهر إلا بعد فشلها كلها:
+      //   1) Groq Whisper (تفريغ)   2) Llama 3.1 8b للنص القصير  3) Llama 3.3 70b للنص الطويل
+      //   4) Gemini 3.8 Flash        5) Gemini 3.5 Flash-Lite
       async function runRequest(myAbort) {
         var geminiKey = getKey();
         var groqKey = getGroqKey();
         var data = payload;
         var lastErr = null;
         var layersTried = 0;
-        var geminiLayers = geminiKey ? MODELS.length : 0; // بلا مفتاح Gemini نقفز مباشرة إلى Groq
+        var groqTried = false;
 
-        // الطبقتان 1 و 2: نماذج Gemini
-        for (var m = 0; m < geminiLayers; m++) {
-          var isFallback = m > 0;
-          var netRetried = false;
-          var busyRetried = false;
-          var attemptTimeout = ATTEMPT_TIMEOUT_MS;
-          var moveOn = false;
-          layersTried++;
-
-          while (!moveOn) {
-            try {
-              var result = await attemptGemini(geminiKey, data, myAbort, MODELS[m], isFallback, attemptTimeout);
-              if (myAbort.signal.aborted) return;
-              await completeSuccess(result, myAbort);
-              return;
-            } catch (err) {
-              if (myAbort.signal.aborted) return;
-              console.error('Model ' + MODELS[m] + ' failed:', err);
-              lastErr = err;
-
-              if (m === 0 && err && err.status === 503 && !busyRetried) {
-                // 503 (مزدحم) من النموذج الأول: لا ننتظر المهلة الطويلة. ثانيتان ثم محاولة أخيرة قصيرة
-                busyRetried = true;
-                attemptTimeout = BUSY_RETRY_TIMEOUT_MS;
-                try {
-                  await delay(BUSY_RETRY_DELAY_MS, myAbort);
-                } catch (e2) {
-                  return;
-                }
-              } else if (err && err.retryable && !err.fallback && !netRetried) {
-                // انقطاع شبكة: إعادة محاولة واحدة لنفس النموذج
-                netRetried = true;
-                loadingText.textContent = 'حدث خطأ في الاتصال، جاري إعادة المحاولة...';
-                try {
-                  await waitForOnline(myAbort, 15000);
-                  await delay(2000, myAbort);
-                } catch (e2) {
-                  return;
-                }
-              } else {
-                moveOn = true; // أي فشل آخر: ننتقل للطبقة التالية بصمت
-              }
-            }
-          }
-
-          if (m < geminiLayers - 1) loadingText.textContent = FALLBACK_TEXT;
-        }
-
-        // الطبقة 3 (السرية): Groq، إذا وُجد مفتاحه
+        // الطبقات 1 إلى 3: Groq (Whisper ثم Llama حسب الطول)
         if (groqKey) {
           layersTried++;
-          loadingText.textContent = GROQ_TEXT;
+          groqTried = true;
+          setStage(1);
           clearStageTimer();
+          stageTimer = setTimeout(function () {
+            if (loadingMode === 'busy' && currentStage === 1) setStage(2);
+          }, STEP_SWITCH_MS);
           try {
-            var groqResult = await summarizeWithGroq(data.blob, groqKey, myAbort, data.mime);
+            var groqResult = await summarizeWithGroq(data, groqKey, myAbort);
             if (myAbort.signal.aborted) return;
             await completeSuccess(groqResult, myAbort);
             return;
           } catch (err) {
             if (myAbort.signal.aborted) return;
-            console.error('Groq failed:', err);
-            lastErr = err;
+            console.error('Groq layer failed:', err);
+            lastErr = err; // أي فشل (429 أو 503 أو مهلة أو غيرها): انتقال صامت إلى Gemini
+          }
+          clearStageTimer();
+          if (geminiKey) loadingText.textContent = FALLBACK_TEXT;
+        }
+
+        // الطبقتان 4 و 5: Gemini 3.8 ثم 3.5 Flash-Lite
+        if (geminiKey) {
+          var prepared = true;
+          if (!data.base64) {
+            if (!groqTried) setStage(0); // "جاري تجهيز الصوت..."
+            try {
+              await prepareGeminiPayload(data, myAbort);
+            } catch (err) {
+              if (myAbort.signal.aborted) return;
+              console.error('Audio preparation failed:', err);
+              layersTried++;
+              if (!groqTried) lastErr = err; // مع وجود Groq نُبقي خطأه لأنه الأكثر فائدة
+              prepared = false;
+            }
+          }
+
+          for (var m = 0; prepared && m < MODELS.length; m++) {
+            var isFallback = groqTried || m > 0;
+            var netRetried = false;
+            var busyRetried = false;
+            var attemptTimeout = ATTEMPT_TIMEOUT_MS;
+            var moveOn = false;
+            layersTried++;
+
+            while (!moveOn) {
+              try {
+                var result = await attemptGemini(geminiKey, data, myAbort, MODELS[m], isFallback, attemptTimeout);
+                if (myAbort.signal.aborted) return;
+                await completeSuccess(result, myAbort);
+                return;
+              } catch (err) {
+                if (myAbort.signal.aborted) return;
+                console.error('Model ' + MODELS[m] + ' failed:', err);
+                lastErr = err;
+
+                if (m === 0 && err && err.status === 503 && !busyRetried) {
+                  // 503 (مزدحم) من Gemini 3.8: ثانيتان ثم محاولة أخيرة قصيرة
+                  busyRetried = true;
+                  attemptTimeout = BUSY_RETRY_TIMEOUT_MS;
+                  try {
+                    await delay(BUSY_RETRY_DELAY_MS, myAbort);
+                  } catch (e2) {
+                    return;
+                  }
+                } else if (err && err.retryable && !err.fallback && !netRetried) {
+                  // انقطاع شبكة: إعادة محاولة واحدة لنفس النموذج
+                  netRetried = true;
+                  loadingText.textContent = 'حدث خطأ في الاتصال، جاري إعادة المحاولة...';
+                  try {
+                    await waitForOnline(myAbort, 15000);
+                    await delay(2000, myAbort);
+                  } catch (e2) {
+                    return;
+                  }
+                } else {
+                  moveOn = true; // أي فشل آخر: ننتقل للطبقة التالية بصمت
+                }
+              }
+            }
+
+            if (m < MODELS.length - 1) loadingText.textContent = FALLBACK_TEXT;
           }
         }
 
         if (!lastErr) {
           finishProcessing();
-          showToast('يرجى إدخال مفتاح Gemini أو Groq أولاً: افتح الإعدادات (زر الترس)');
+          showToast('يرجى إدخال مفتاح Groq أو Gemini أولاً: افتح الإعدادات (زر الترس)');
           return;
         }
 
@@ -1356,15 +1438,15 @@
         showErrorView(lastErr.message || 'حدث خطأ غير متوقع.', lastErr.detail);
       }
 
-      async function summarize(blob, mime) {
+      async function summarize(blob, mime, seconds) {
         if (isProcessing) return;
 
         if (!getKey() && !getGroqKey()) {
-          showToast('يرجى إدخال مفتاح Gemini أو Groq أولاً: افتح الإعدادات (زر الترس)');
+          showToast('يرجى إدخال مفتاح Groq أو Gemini أولاً: افتح الإعدادات (زر الترس)');
           return;
         }
         if (!blob || !blob.size) { showToast('لا يوجد صوت لتلخيصه'); return; }
-        if (blob.size > MAX_SIZE) { showToast('حجم الصوت كبير. الحد الأقصى 10 ميجابايت'); return; }
+        if (blob.size > MAX_SIZE) { showToast(FILE_TOO_BIG_TEXT, 8000); return; }
         if (navigator.onLine === false) { showToast('لا يوجد اتصال بالإنترنت. تحقق من اتصالك ثم حاول مجدداً.'); return; }
 
         isProcessing = true;
@@ -1372,28 +1454,16 @@
         runAbort = myAbort;
         openLoading();
 
+        // الصوت الأصلي يذهب مباشرة إلى Groq. التحويل إلى WAV يتم لاحقاً وفقط إن احتجنا Gemini
+        payload = { blob: blob, mime: mime, seconds: seconds || 0, base64: null, gmime: null };
+
         try {
-          var sendBlob = blob;
-          var sendMime = mime;
-
-          if (needsConversion(mime)) {
-            sendBlob = await convertToWav(blob);
-            sendMime = 'audio/wav';
-            guard(myAbort);
-          }
-
-          var base64 = await blobToBase64(sendBlob);
-          guard(myAbort);
-
-          payload = { base64: base64, mime: sendMime, blob: sendBlob }; // blob يُستخدم لطبقة Groq
+          await runRequest(myAbort);
         } catch (err) {
           if (myAbort.signal.aborted) return;
-          finishProcessing();
-          showToast(describeError(err), ERROR_TOAST_MS);
-          return;
+          console.error('runRequest crashed:', err);
+          showErrorView('حدث خطأ غير متوقع.', (err && err.message) || '');
         }
-
-        await runRequest(myAbort);
       }
 
       cancelLoadingBtn.addEventListener('click', function () {
@@ -1420,17 +1490,12 @@
 
       summarizeRecordBtn.addEventListener('click', function () {
         if (!recordedBlob) { showToast('لا يوجد تسجيل لتلخيصه'); return; }
-        var mime = baseMime(recordedBlob.type);
-        if (needsConversion(mime) && recordedSeconds > MAX_WAV_SECONDS) {
-          showToast('التسجيل طويل جداً للتحويل (الحد الأقصى نحو 7 دقائق). سجّل مقاطع أقصر.');
-          return;
-        }
-        summarize(recordedBlob, mime);
+        summarize(recordedBlob, baseMime(recordedBlob.type), recordedSeconds);
       });
 
       summarizeFileBtn.addEventListener('click', function () {
         if (!selectedFile) { showToast('اختر ملفاً أولاً'); return; }
-        summarize(selectedFile, EXT_MIME[getExt(selectedFile.name)] || baseMime(selectedFile.type));
+        summarize(selectedFile, EXT_MIME[getExt(selectedFile.name)] || baseMime(selectedFile.type), 0);
       });
 
       /* ====== أدوات بناء العناصر (textContent فقط) ====== */
@@ -1894,8 +1959,11 @@
       // true: تُرفق في المتابعة خلاصة قصيرة (الخلاصة والنقاط والمهام فقط، بلا تفريغ) لتثبيت المرجع.
       // false: المتابعة تعتمد على آخر 4 رسائل فقط.
       var CHAT_FOLLOWUP_GROUNDING = true;
-      // الشات يبدأ بـ Groq (الأسرع) ثم Gemini كاحتياط. النموذج الثاني في Groq يعمل إن تعذّر الأول
-      var GROQ_CHAT_MODELS = ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b'];
+      // الشات يستخدم نفس التوجيه الذكي: Groq أولاً (8b للتسجيل القصير، 70b للطويل) ثم Gemini 3.8 ثم 3.5 Lite
+      function pickChatModel(item) {
+        var t = (item && item.full_transcript) || '';
+        return t.length < SHORT_TRANSCRIPT_CHARS ? GROQ_FAST_MODEL : GROQ_QUALITY_MODEL;
+      }
       var CHAT_SUGGESTIONS = ['ما أهم فكرة في التسجيل؟', 'ما القرارات المتفق عليها؟', 'لخّص التسجيل في جملتين'];
 
       var chatBusy = false;
@@ -2103,11 +2171,11 @@
         return text;
       }
 
-      // شلال الشات: Groq (llama ثم gpt-oss) ← Gemini 3.8 ← Gemini 3.5 Lite. أي فشل ينتقل للتالي بصمت
+      // شلال الشات: Groq (llama حسب الطول) ← Gemini 3.8 ← Gemini 3.5 Lite. أي فشل ينتقل للتالي بصمت
       async function askAssistant(item, question, chatCtrl, onStatus) {
         var geminiKey = getKey();
         var groqKey = getGroqKey();
-        if (!geminiKey && !groqKey) throw fail('يرجى إدخال مفتاح Gemini أو Groq أولاً: افتح الإعدادات (زر الترس).');
+        if (!geminiKey && !groqKey) throw fail('يرجى إدخال مفتاح Groq أو Gemini أولاً: افتح الإعدادات (زر الترس).');
 
         // السؤال الأول (لا رسائل محفوظة): التفريغ كاملاً. المتابعة: آخر 4 رسائل فقط
         var isFirst = item.chat.length === 0;
@@ -2152,15 +2220,13 @@
 
         // الطبقة الأولى: Groq
         if (groqKey) {
-          for (var g = 0; g < GROQ_CHAT_MODELS.length; g++) {
-            try {
-              return await chatWithGroq(groqKey, contents, chatCtrl, GROQ_CHAT_MODELS[g]);
-            } catch (err) {
-              if (chatCtrl.signal.aborted || (err && err.name === 'AbortError')) throw err;
-              console.error('Chat Groq model ' + GROQ_CHAT_MODELS[g] + ' failed:', err);
-              lastErr = err;
-              if (err && err.status === 401) break; // المفتاح نفسه مرفوض: لا فائدة من نموذج آخر
-            }
+          var groqModel = pickChatModel(item);
+          try {
+            return await chatWithGroq(groqKey, contents, chatCtrl, groqModel);
+          } catch (err) {
+            if (chatCtrl.signal.aborted || (err && err.name === 'AbortError')) throw err;
+            console.error('Chat Groq model ' + groqModel + ' failed:', err);
+            lastErr = err; // أي فشل: انتقال صامت إلى Gemini
           }
         }
 

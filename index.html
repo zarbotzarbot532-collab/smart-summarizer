@@ -116,6 +116,10 @@
     .bh-glow { filter: drop-shadow(0 0 8px rgba(249, 115, 22, .6)); }
 
     /* توهج خفيف في زوايا الصفحة */
+    /* إصلاح الواجهة: منع أي تمدد أفقي للصفحة + شاشة تحميل تغطي كامل الشاشة */
+    html { overflow-x: hidden; }
+    body { max-width: 100%; }
+    #loadingScreen { position: fixed; top: 0; right: 0; bottom: 0; left: 0; width: 100%; height: 100vh; height: 100dvh; max-width: none; }
     .ambient { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
     .ambient::before, .ambient::after { content: ''; position: absolute; border-radius: 9999px; filter: blur(90px); }
     .ambient::before { width: 26rem; height: 26rem; top: -10rem; right: -9rem; background: #dc2626; opacity: .10; }
@@ -287,7 +291,7 @@
   <header class="sticky top-0 z-30 bg-white/90 dark:bg-slate-800/90 backdrop-blur border-b border-slate-200 dark:border-slate-700">
     <div class="max-w-4xl mx-auto flex items-center justify-between px-3 h-16">
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 min-w-0">
         <button id="menuBtn" type="button"
           class="w-11 h-11 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           aria-label="فتح القائمة الجانبية" aria-controls="sidebar" aria-expanded="false">
@@ -303,13 +307,13 @@
         </a>
       </div>
 
-      <div class="flex items-center gap-1">
+      <div class="flex items-center gap-1 shrink-0">
         <!-- علامة حالة المفتاح -->
         <button id="keyBadge" type="button"
           class="flex items-center gap-1.5 shrink-0 whitespace-nowrap text-xs font-bold px-2.5 py-1.5 rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400"
           aria-label="حالة مفتاح Gemini، اضغط لفتح الإعدادات">
           <i class="fa-solid fa-circle text-[8px]" aria-hidden="true"></i>
-          <span id="keyBadgeText">يرجى إدخال المفتاح</span>
+          <span id="keyBadgeText" class="hidden min-[420px]:inline">يرجى إدخال المفتاح</span>
         </button>
 
         <button id="themeBtn" type="button"
@@ -397,20 +401,20 @@
       <div class="grid gap-4 md:grid-cols-2">
 
         <!-- ===== البطاقة 1: تسجيل مباشر ===== -->
-        <section class="flex flex-col rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm p-5" aria-labelledby="recTitle">
+        <section class="flex flex-col overflow-visible rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm p-5 pb-8" aria-labelledby="recTitle">
           <h2 id="recTitle" class="flex items-center gap-2 font-bold text-lg">
             <i class="fa-solid fa-microphone text-brand dark:text-brand-400" aria-hidden="true"></i>
             تسجيل مباشر
           </h2>
-          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">سجّل المحاضرة أو الاجتماع من ميكروفون جهازك.</p>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">سجّل المحاضرة أو الاجتماع من ميكروفون جهازك (حتى 10 دقائق).</p>
 
-          <div class="flex-1 flex flex-col items-center justify-center gap-4 py-6">
+          <div class="flex-1 flex flex-col items-center justify-center gap-4 py-8 min-h-[16rem] overflow-visible">
             <div id="timer" dir="ltr" class="hidden text-3xl font-extrabold tabular-nums text-red-500" aria-hidden="true">00:00</div>
 
-            <div class="relative">
-              <span id="pulseRing" class="hidden absolute inset-0 rounded-full bg-red-500/40 animate-ping" aria-hidden="true"></span>
+            <div class="relative shrink-0 p-2">
+              <span id="pulseRing" class="hidden absolute inset-2 rounded-full bg-red-500/40 animate-ping pointer-events-none" aria-hidden="true"></span>
               <button id="recordBtn" type="button"
-                class="relative w-24 h-24 rounded-full bg-caesar glow-caesar text-white flex items-center justify-center transition active:scale-95 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand-400 disabled:opacity-60"
+                class="relative shrink-0 w-24 h-24 min-w-[6rem] min-h-[6rem] rounded-full bg-caesar glow-caesar text-white flex items-center justify-center transition active:scale-95 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand-400 disabled:opacity-60"
                 aria-label="بدء التسجيل">
                 <i id="recordIcon" class="fa-solid fa-microphone text-3xl" aria-hidden="true"></i>
               </button>
@@ -648,7 +652,7 @@
         <div class="pt-4 mt-1 border-t border-slate-200 dark:border-slate-700 space-y-3">
           <label for="groqApiKeyInput" class="flex items-center gap-2 font-bold">
             <i class="fa-solid fa-bolt text-brand dark:text-brand-400" aria-hidden="true"></i>
-            مفتاح Groq API (احتياطي)
+            مفتاح Groq API (الأسرع، يُنصح به)
           </label>
 
           <div class="relative">
@@ -690,7 +694,7 @@
         </div>
 
         <p class="text-xs text-slate-400 dark:text-slate-500 leading-relaxed">
-          يُحفظ المفتاح على هذا الجهاز فقط داخل المتصفح، ويُرسل إلى خوادم Google (وإلى Groq عند استخدام الاحتياط) عند التلخيص.
+          يُحفظ المفتاح على هذا الجهاز فقط داخل المتصفح، ويُرسل إلى خوادم Groq أولاً، وإلى خوادم Google عند الاحتياط، وقت التلخيص والمحادثة فقط.
         </p>
       </form>
     </div>
@@ -751,6 +755,6 @@
   <!-- ========== منطقة الطباعة (مخفية على الشاشة، تظهر عند تصدير PDF) ========== -->
   <div id="printArea" class="hidden" dir="rtl" aria-hidden="true"></div>
 
-  <script src="app.js?v=14"></script>
+  <script src="app.js?v=20"></script>
 </body>
 </html>
