@@ -1,5 +1,5 @@
 /* Service Worker — شبكة أولاً للملفات الأساسية (حتى لا تعلق نسخة قديمة)، ثم الكاش عند انقطاع الإنترنت */
-var CACHE_NAME = 'caesar-v20';
+var CACHE_NAME = 'caesar-v30';
 var CORE_ASSETS = ['./', './index.html', './app.js', './manifest.json'];
 
 self.addEventListener('install', function (event) {

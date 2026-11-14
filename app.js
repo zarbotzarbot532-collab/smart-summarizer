@@ -90,6 +90,21 @@
       var chatInput = $('chatInput');
       var chatSendBtn = $('chatSendBtn');
       var chatClearBtn = $('chatClearBtn');
+      var chatBackBtn = $('chatBackBtn');
+      var chatMicBtn = $('chatMicBtn');
+      var panelChat = $('panel-chat');
+
+      /* ====== عناصر مسبك الأفكار ====== */
+      var forgeModal = $('forgeModal');
+      var forgeCloseBtn = $('forgeCloseBtn');
+      var forgeResult = $('forgeResult');
+      var forgeStatus = $('forgeStatus');
+      var forgeOutput = $('forgeOutput');
+      var forgeActions = $('forgeActions');
+      var forgeCount = $('forgeCount');
+      var forgeRetryBtn = $('forgeRetryBtn');
+      var forgeCopyBtn = $('forgeCopyBtn');
+      var forgePickBtns = Array.prototype.slice.call(document.querySelectorAll('[data-platform]'));
 
       /* ====== أدوات صغيرة ====== */
       function showEl(node, display) { node.classList.remove('hidden'); node.classList.add(display); }
@@ -98,6 +113,8 @@
       /* ====== التنبيه (Toast) ====== */
       function showToast(message, duration) {
         toast.textContent = message; // textContent: آمن من XSS
+        // داخل الشات (شاشة كاملة) نرفع التنبيه فوق شريط الإدخال
+        toast.style.bottom = (panelChat && !panelChat.classList.contains('hidden')) ? '6.5rem' : '';
         toast.classList.remove('opacity-0', 'translate-y-4');
         toast.classList.add('opacity-100', 'translate-y-0');
         clearTimeout(toastTimer);
@@ -175,13 +192,37 @@
       var BADGE_OK = ['bg-green-100', 'text-green-700', 'dark:bg-green-900/40', 'dark:text-green-400'];
       var BADGE_BAD = ['bg-red-100', 'text-red-700', 'dark:bg-red-900/40', 'dark:text-red-400'];
 
-      function getKey() {
-        try { return localStorage.getItem(KEY_STORAGE) || ''; } catch (e) { return ''; }
+      // المفاتيح تُحفظ مرمَّزة بـ Base64 (بادئة b64:) ولا تُخزَّن نصاً صريحاً. هذا ترميز لإخفائها عن النظرة العابرة وليس تشفيراً قوياً
+      var SECRET_PREFIX = 'b64:';
+
+      function encodeSecret(value) {
+        try { return SECRET_PREFIX + btoa(unescape(encodeURIComponent(value))); } catch (e) { return value; }
       }
 
-      function getGroqKey() {
-        try { return localStorage.getItem(GROQ_KEY_STORAGE) || ''; } catch (e) { return ''; }
+      function decodeSecret(stored) {
+        if (!stored) return '';
+        if (stored.indexOf(SECRET_PREFIX) !== 0) return stored; // مفتاح قديم محفوظ نصاً: يُرحَّل عند القراءة
+        try { return decodeURIComponent(escape(atob(stored.slice(SECRET_PREFIX.length)))); } catch (e) { return ''; }
       }
+
+      function readSecret(storageKey) {
+        try {
+          var raw = localStorage.getItem(storageKey) || '';
+          if (raw && raw.indexOf(SECRET_PREFIX) !== 0) {
+            // ترحيل تلقائي: أعد حفظ المفتاح القديم مرمَّزاً
+            try { localStorage.setItem(storageKey, encodeSecret(raw)); } catch (e2) {}
+          }
+          return decodeSecret(raw);
+        } catch (e) { return ''; }
+      }
+
+      function writeSecret(storageKey, value) {
+        localStorage.setItem(storageKey, encodeSecret(value));
+      }
+
+      function getKey() { return readSecret(KEY_STORAGE); }
+
+      function getGroqKey() { return readSecret(GROQ_KEY_STORAGE); }
 
       function updateKeyUI() {
         var key = getKey();
@@ -235,8 +276,8 @@
         if (groq && !GROQ_PATTERN.test(groq)) { showToast('صيغة مفتاح Groq غير صحيحة، يجب أن يبدأ بـ gsk_'); return; }
 
         try {
-          if (gemini) localStorage.setItem(KEY_STORAGE, gemini);
-          if (groq) localStorage.setItem(GROQ_KEY_STORAGE, groq);
+          if (gemini) writeSecret(KEY_STORAGE, gemini);
+          if (groq) writeSecret(GROQ_KEY_STORAGE, groq);
         } catch (err) {
           showToast('تعذّر حفظ المفتاح (التخزين المحلي معطّل في المتصفح)');
           return;
@@ -266,7 +307,8 @@
       var STYLE_HINTS = {
         detailed: 'نمط التلخيص المطلوب: مفصّل ومناسب للطلبة؛ اشرح الأفكار بوضوح ووسّع النقاط الرئيسية.',
         meeting: 'نمط التلخيص المطلوب: مختصر ومناسب للاجتماعات؛ ركّز على القرارات والمهام.',
-        bullets: 'نمط التلخيص المطلوب: نقاط سريعة؛ اجعل كل نقطة جملة قصيرة ومباشرة.'
+        bullets: 'نمط التلخيص المطلوب: نقاط سريعة؛ اجعل كل نقطة جملة قصيرة ومباشرة.',
+        caesar_eye: 'نمط التلخيص المطلوب: «عين القيصر». ركّز على أمرين فقط: (1) التناقضات: أقوال أو أرقام أو مواقف تعارض بعضها داخل الحديث نفسه. (2) الوعود غير الموثقة: التزامات أو وعود أو اتفاقات شفهية قيلت دون موعد محدد أو مسؤول واضح أو توثيق. ابدأ كل نقطة رئيسية بعبارة «تناقض:» أو «وعد غير موثق:» واذكر صاحب القول إن عُرف. ضع كل وعد غير موثق أيضاً في action_items مع المسؤول والموعد إن وُجدا، وإلا فاكتب «غير محدد». استند إلى ما قيل فعلاً فقط ولا تخترع تناقضات أو وعوداً؛ وإن لم تجد أياً منها فاذكر ذلك صراحة في الخلاصة التنفيذية.'
       };
 
       (function restoreStyle() {
@@ -591,10 +633,10 @@
 
       /* ====== شاشة التحميل: الخطوات والعدّاد ====== */
       var STAGES = [
-        'جاري تجهيز الصوت...',
-        'جاري إرسال الملف إلى الذكاء الاصطناعي...',
-        'الذكاء الاصطناعي يستمع ويفهم المحتوى...',
-        'جاري تنظيم الملخص والمهام...'
+        'سيزار يفك شيفرة حديثك...',
+        'سيزار يلتقط نبض أفكارك...',
+        'سيزار يستدعي أرشيفه المعرفي...',
+        'سيزار يستخرج الجوهر...'
       ];
       var STEP_SWITCH_MS = 4000;
 
@@ -1363,7 +1405,7 @@
         if (geminiKey) {
           var prepared = true;
           if (!data.base64) {
-            if (!groqTried) setStage(0); // "جاري تجهيز الصوت..."
+            if (!groqTried) setStage(0); // أول رسالة: «سيزار يفك شيفرة حديثك...»
             try {
               await prepareGeminiPayload(data, myAbort);
             } catch (err) {
@@ -1743,8 +1785,10 @@
         if (currentId !== null && String(currentId) === String(id)) {
           cancelChat();
           currentId = null;
+          selectTab('summary');
           workspaceView.classList.add('hidden');
           homeView.classList.remove('hidden');
+          navReconcile();
         }
         renderHistory();
         showToast('تم حذف الخلاصة');
@@ -1778,11 +1822,47 @@
         panels.forEach(function (p) {
           p.classList.toggle('hidden', p.getAttribute('data-panel') !== name);
         });
-        if (name === 'chat') { autoResizeChatInput(); scrollChatToBottom(); }
+        if (name === 'chat') {
+          // الشات يأخذ الشاشة كاملة (التبويبات العلوية تختفي خلفه)
+          document.body.classList.add('overflow-hidden');
+          syncChatViewport();
+          autoResizeChatInput();
+          scrollChatToBottom();
+        } else {
+          resetChatViewport();
+          if (!isSidebarOpen() && !isModalOpen() && !isForgeOpen()) document.body.classList.remove('overflow-hidden');
+        }
+      }
+
+      // مع لوحة المفاتيح على الهاتف: الشات يتبع ارتفاع الشاشة المرئي كي يبقى شريط الإدخال ظاهراً
+      function syncChatViewport() {
+        var vv = window.visualViewport;
+        if (!vv || panelChat.classList.contains('hidden')) return;
+        panelChat.style.top = vv.offsetTop + 'px';
+        panelChat.style.bottom = 'auto';
+        panelChat.style.height = vv.height + 'px';
+      }
+
+      function resetChatViewport() {
+        panelChat.style.top = '';
+        panelChat.style.bottom = '';
+        panelChat.style.height = '';
+      }
+
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', function () {
+          if (panelChat.classList.contains('hidden')) return;
+          syncChatViewport();
+          scrollChatToBottom();
+        });
+        window.visualViewport.addEventListener('scroll', syncChatViewport);
       }
 
       tabBtns.forEach(function (btn) {
-        btn.addEventListener('click', function () { selectTab(btn.getAttribute('data-tab')); });
+        btn.addEventListener('click', function () {
+          selectTab(btn.getAttribute('data-tab'));
+          navReconcile();
+        });
       });
 
       function renderSummary(item) {
@@ -1813,6 +1893,21 @@
           c2.appendChild(emptyNote('لا توجد نقاط رئيسية'));
         }
         panelSummary.appendChild(c2);
+
+        // مسبك الأفكار: تحويل الخلاصة إلى منشور لمنصة اجتماعية
+        var forgeBtn = el('button', 'forge-card w-full flex items-center gap-3 text-start rounded-3xl p-4 transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400');
+        forgeBtn.type = 'button';
+        forgeBtn.id = 'forgeOpenBtn';
+        var ficon = el('span', 'w-12 h-12 shrink-0 rounded-2xl bg-caesar glow-caesar text-white flex items-center justify-center');
+        ficon.appendChild(el('i', 'fa-solid fa-fire-flame-curved text-xl'));
+        var ftext = el('span', 'flex-1 min-w-0 leading-snug');
+        ftext.appendChild(el('span', 'block font-extrabold text-lg', 'مسبك الأفكار'));
+        ftext.appendChild(el('span', 'block text-sm text-slate-500 dark:text-slate-400', 'حوّلها إلى منشور جاهز لمنصتك المفضلة: LinkedIn أو X أو Instagram'));
+        forgeBtn.appendChild(ficon);
+        forgeBtn.appendChild(ftext);
+        forgeBtn.appendChild(el('i', 'fa-solid fa-chevron-left text-slate-400'));
+        forgeBtn.addEventListener('click', openForge);
+        panelSummary.appendChild(forgeBtn);
       }
 
       function renderTranscript(item) {
@@ -1969,42 +2064,46 @@
       var chatBusy = false;
       var chatAbort = null;
 
-      var BUBBLE_BASE = 'min-w-0 px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap break-words';
-      var BUBBLE_USER = 'max-w-[85%] md:max-w-[34rem] bg-caesar text-white rounded-2xl rounded-br-md shadow-md';
-      var BUBBLE_AI = 'max-w-[calc(100%-3.25rem)] md:max-w-[36rem] bubble-ai rounded-2xl rounded-bl-md';
+      var BUBBLE_BASE = 'min-w-0 px-3.5 pt-2 pb-1.5 text-[15px] leading-relaxed break-words';
+      var BUBBLE_USER = 'max-w-[85%] md:max-w-[34rem] bubble-user rounded-2xl rounded-br-md';
+      var BUBBLE_AI = 'max-w-[85%] md:max-w-[36rem] bubble-ai rounded-2xl rounded-bl-md';
 
       function scrollChatToBottom() {
         chatMessages.scrollTop = chatMessages.scrollHeight;
       }
 
-      // صورة سيزار: دائرة 40×40 فيها رمز الثقب الأسود المتوهج (SVG عبر createElementNS)
-      var SVG_NS = 'http://www.w3.org/2000/svg';
-      function buildAvatar() {
-        var wrap = el('span', 'caesar-avatar');
-        wrap.setAttribute('aria-hidden', 'true');
-        var svg = document.createElementNS(SVG_NS, 'svg');
-        svg.setAttribute('viewBox', '0 0 64 64');
-        var use = document.createElementNS(SVG_NS, 'use');
-        use.setAttribute('href', '#bh');
-        svg.appendChild(use);
-        wrap.appendChild(svg);
-        return wrap;
+      // وقت الرسالة (مثل 14:05) بالأرقام اللاتينية
+      function formatClock(ts) {
+        try {
+          var d = new Date(ts || Date.now());
+          if (isNaN(d.getTime())) return '';
+          return pad(d.getHours()) + ':' + pad(d.getMinutes());
+        } catch (e) {
+          return '';
+        }
       }
 
-      // رسالة المستخدم على اليمين (بداية السطر في RTL)، ورد سيزار على اليسار ومعه الصورة
-      function buildBubble(role, text) {
+      // رسالة المستخدم على اليمين بتدرج برتقالي، ورد سيزار على اليسار برمادي داكن، والوقت أسفل كل فقاعة
+      function buildBubble(role, text, ts) {
         var isUser = role === 'user';
-        var row = el('div', 'flex items-end gap-2.5 ' + (isUser ? 'justify-start' : 'justify-end'));
-        var bubble = el('div', BUBBLE_BASE + ' ' + (isUser ? BUBBLE_USER : BUBBLE_AI), text); // textContent: آمن
-        bubble.setAttribute('dir', 'auto');
+        var row = el('div', 'flex ' + (isUser ? 'justify-start' : 'justify-end'));
+        var bubble = el('div', BUBBLE_BASE + ' ' + (isUser ? BUBBLE_USER : BUBBLE_AI));
+
+        var body = el('div', 'whitespace-pre-wrap break-words', text); // textContent: آمن
+        body.setAttribute('dir', 'auto');
+        bubble.appendChild(body);
+
+        var time = el('div', 'mt-1 text-[11px] leading-none tabular-nums text-end ' + (isUser ? 'text-white/75' : 'text-slate-400'), formatClock(ts));
+        time.setAttribute('data-time', '');
+        bubble.appendChild(time);
+
         row.appendChild(bubble);
-        if (!isUser) row.appendChild(buildAvatar());
         return row;
       }
 
       // مؤشر الكتابة: فقاعة رمادية فيها ثلاث نقاط تنبض مع رسالة صغيرة
       function buildTyping() {
-        var row = el('div', 'flex items-end gap-2.5 justify-end');
+        var row = el('div', 'flex justify-end');
         var bubble = el('div', 'bubble-ai rounded-2xl rounded-bl-md px-4 py-3 flex items-center gap-3');
         bubble.setAttribute('role', 'status');
         bubble.setAttribute('aria-label', 'جاري البحث في النص');
@@ -2022,14 +2121,13 @@
         bubble.appendChild(label);
 
         row.appendChild(bubble);
-        row.appendChild(buildAvatar());
         return row;
       }
 
       // فقاعة خطأ داخل الشات مع زر إعادة المحاولة
       function buildErrorBubble(err, question) {
-        var row = el('div', 'flex items-end gap-2.5 justify-end');
-        var box = el('div', 'max-w-[calc(100%-3.25rem)] min-w-0 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm border bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-200 dark:border-red-800/60 space-y-1.5');
+        var row = el('div', 'flex justify-end');
+        var box = el('div', 'max-w-[85%] min-w-0 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm border bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-200 dark:border-red-800/60 space-y-1.5');
 
         var head = el('p', 'font-semibold flex items-start gap-2 leading-relaxed');
         head.appendChild(el('i', 'fa-solid fa-circle-exclamation mt-1 shrink-0'));
@@ -2056,7 +2154,6 @@
         box.appendChild(retry);
 
         row.appendChild(box);
-        row.appendChild(buildAvatar());
         return row;
       }
 
@@ -2079,8 +2176,8 @@
 
       function renderChat(item) {
         chatMessages.replaceChildren();
-        chatMessages.appendChild(buildBubble('ai', WELCOME_MESSAGE)); // الترحيب لا يُخزَّن
-        item.chat.forEach(function (m) { chatMessages.appendChild(buildBubble(m.role, m.text)); });
+        chatMessages.appendChild(buildBubble('ai', WELCOME_MESSAGE, Date.now())); // الترحيب لا يُخزَّن
+        item.chat.forEach(function (m) { chatMessages.appendChild(buildBubble(m.role, m.text, m.ts)); });
         if (!item.chat.length) chatMessages.appendChild(buildChips());
         scrollChatToBottom();
       }
@@ -2147,10 +2244,12 @@
       }
 
       // طبقة Groq للشات (نص فقط، بدون وضع JSON)
-      async function chatWithGroq(apiKey, contents, chatCtrl, model) {
+      var CHAT_SYSTEM = 'أنت سيزار، مساعد ذكي يجيب عن أسئلة حول محاضرة أو اجتماع. أجب بالعربية بدقة واختصار وبنص عادي دون رموز Markdown.';
+
+      async function chatWithGroq(apiKey, contents, chatCtrl, model, system, temperature) {
         var messages = [{
           role: 'system',
-          content: 'أنت سيزار، مساعد ذكي يجيب عن أسئلة حول محاضرة أو اجتماع. أجب بالعربية بدقة واختصار وبنص عادي دون رموز Markdown.'
+          content: system || CHAT_SYSTEM
         }];
         contents.forEach(function (c) {
           messages.push({ role: c.role === 'model' ? 'assistant' : 'user', content: c.parts[0].text });
@@ -2162,7 +2261,7 @@
             'Authorization': 'Bearer ' + apiKey,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ model: model, messages: messages, temperature: 0.3 })
+          body: JSON.stringify({ model: model, messages: messages, temperature: temperature === undefined ? 0.3 : temperature })
         }, chatCtrl, CHAT_GROQ_TIMEOUT_MS);
 
         var text = res && res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content;
@@ -2171,7 +2270,62 @@
         return text;
       }
 
-      // شلال الشات: Groq (llama حسب الطول) ← Gemini 3.8 ← Gemini 3.5 Lite. أي فشل ينتقل للتالي بصمت
+      // شلال النص (الشات ومسبك الأفكار): Groq أولاً ← Gemini 3.8 ← Gemini 3.5 Lite. أي فشل ينتقل للتالي بصمت
+      async function textWaterfall(contents, ctrl, onStatus, groqModel, system, temperature) {
+        var geminiKey = getKey();
+        var groqKey = getGroqKey();
+        if (!geminiKey && !groqKey) throw fail('يرجى إدخال مفتاح Groq أو Gemini أولاً: افتح الإعدادات (زر الترس).');
+        if (navigator.onLine === false) {
+          throw fail('لا يوجد اتصال بالإنترنت. تحقق من اتصالك ثم أعد المحاولة.', '', true);
+        }
+
+        var lastErr = null;
+
+        // الطبقة الأولى: Groq
+        if (groqKey) {
+          try {
+            return await chatWithGroq(groqKey, contents, ctrl, groqModel, system, temperature);
+          } catch (err) {
+            if (ctrl.signal.aborted || (err && err.name === 'AbortError')) throw err;
+            console.error('Text Groq model ' + groqModel + ' failed:', err);
+            lastErr = err; // أي فشل: انتقال صامت إلى Gemini
+          }
+        }
+
+        // الطبقة الثانية: Gemini
+        if (geminiKey) {
+          if (groqKey && onStatus) onStatus(FALLBACK_TEXT);
+          var body = { contents: contents, generationConfig: { temperature: temperature === undefined ? 0.3 : temperature } };
+
+          for (var m = 0; m < MODELS.length; m++) {
+            var busyRetried = false;
+            var timeoutMs = CHAT_GEMINI_TIMEOUT_MS;
+            var moveOn = false;
+
+            while (!moveOn) {
+              try {
+                return await chatGeminiLayer(geminiKey, body, MODELS[m], ctrl, timeoutMs);
+              } catch (err) {
+                if (ctrl.signal.aborted || (err && err.name === 'AbortError')) throw err;
+                console.error('Text model ' + MODELS[m] + ' failed:', err);
+                lastErr = err;
+
+                if (m === 0 && err && err.status === 503 && !busyRetried) {
+                  // مزدحم: ننتظر ثانيتين ثم محاولة أخيرة قصيرة مع نفس النموذج
+                  busyRetried = true;
+                  timeoutMs = CHAT_BUSY_RETRY_TIMEOUT_MS;
+                  await delay(BUSY_RETRY_DELAY_MS, ctrl);
+                } else {
+                  moveOn = true;
+                }
+              }
+            }
+          }
+        }
+
+        throw lastErr || fail('تعذّر الحصول على رد. حاول مرة أخرى.');
+      }
+
       async function askAssistant(item, question, chatCtrl, onStatus) {
         var geminiKey = getKey();
         var groqKey = getGroqKey();
@@ -2216,52 +2370,7 @@
 
         contents.push({ role: 'user', parts: [{ text: prompt }] });
 
-        var lastErr = null;
-
-        // الطبقة الأولى: Groq
-        if (groqKey) {
-          var groqModel = pickChatModel(item);
-          try {
-            return await chatWithGroq(groqKey, contents, chatCtrl, groqModel);
-          } catch (err) {
-            if (chatCtrl.signal.aborted || (err && err.name === 'AbortError')) throw err;
-            console.error('Chat Groq model ' + groqModel + ' failed:', err);
-            lastErr = err; // أي فشل: انتقال صامت إلى Gemini
-          }
-        }
-
-        // الطبقة الثانية: Gemini
-        if (geminiKey) {
-          if (groqKey && onStatus) onStatus(FALLBACK_TEXT);
-          var body = { contents: contents, generationConfig: { temperature: 0.3 } };
-
-          for (var m = 0; m < MODELS.length; m++) {
-            var busyRetried = false;
-            var timeoutMs = CHAT_GEMINI_TIMEOUT_MS;
-            var moveOn = false;
-
-            while (!moveOn) {
-              try {
-                return await chatGeminiLayer(geminiKey, body, MODELS[m], chatCtrl, timeoutMs);
-              } catch (err) {
-                if (chatCtrl.signal.aborted || (err && err.name === 'AbortError')) throw err;
-                console.error('Chat model ' + MODELS[m] + ' failed:', err);
-                lastErr = err;
-
-                if (m === 0 && err && err.status === 503 && !busyRetried) {
-                  // مزدحم: ننتظر ثانيتين ثم محاولة أخيرة قصيرة مع نفس النموذج
-                  busyRetried = true;
-                  timeoutMs = CHAT_BUSY_RETRY_TIMEOUT_MS;
-                  await delay(BUSY_RETRY_DELAY_MS, chatCtrl);
-                } else {
-                  moveOn = true;
-                }
-              }
-            }
-          }
-        }
-
-        throw lastErr || fail('تعذّر الحصول على رد. حاول مرة أخرى.');
+        return textWaterfall(contents, chatCtrl, onStatus, pickChatModel(item), null, 0.3);
       }
 
       async function sendChat(question, isRetry) {
@@ -2275,7 +2384,8 @@
         var chips = chatMessages.querySelector('[data-chips]');
         if (chips) chips.remove();
 
-        if (!isRetry) chatMessages.appendChild(buildBubble('user', question));
+        var askedAt = Date.now();
+        if (!isRetry) chatMessages.appendChild(buildBubble('user', question, askedAt));
         var typingRow = buildTyping();
         chatMessages.appendChild(typingRow);
         scrollChatToBottom();
@@ -2295,15 +2405,16 @@
           var live = findItem(itemId);
           if (!live) return;
 
+          var answeredAt = Date.now();
           live.chat.push(
-            { role: 'user', text: question, ts: Date.now() },
-            { role: 'ai', text: answer, ts: Date.now() }
+            { role: 'user', text: question, ts: askedAt },
+            { role: 'ai', text: answer, ts: answeredAt }
           );
           if (live.chat.length > MAX_CHAT_MESSAGES) live.chat = live.chat.slice(-MAX_CHAT_MESSAGES);
           saveHistory();
 
           if (currentId !== null && String(currentId) === String(itemId)) {
-            chatMessages.appendChild(buildBubble('ai', answer));
+            chatMessages.appendChild(buildBubble('ai', answer, answeredAt));
             scrollChatToBottom();
           }
         } catch (err) {
@@ -2349,6 +2460,16 @@
 
       chatInput.addEventListener('input', autoResizeChatInput);
 
+      chatBackBtn.addEventListener('click', function () {
+        selectTab('summary');
+        navReconcile();
+      });
+
+      // أيقونة الميكروفون: للتصميم فقط حالياً
+      chatMicBtn.addEventListener('click', function () {
+        showToast('الإدخال الصوتي في الشات قريباً');
+      });
+
       chatClearBtn.addEventListener('click', function () {
         var item = getCurrent();
         if (!item) return;
@@ -2385,6 +2506,7 @@
         workspaceView.classList.remove('hidden');
         renderHistory();
         window.scrollTo(0, 0);
+        navReconcile();
       }
 
       titleInput.addEventListener('input', function () {
@@ -2406,7 +2528,8 @@
         renderHistory();
       });
 
-      backBtn.addEventListener('click', function () {
+      // العودة من مساحة العمل إلى الرئيسية (تُستخدم من الزر ومن زر الرجوع في الهاتف)
+      function showHome() {
         flushSave();
         cancelChat();
         currentId = null;
@@ -2414,6 +2537,11 @@
         homeView.classList.remove('hidden');
         renderHistory();
         window.scrollTo(0, 0);
+      }
+
+      backBtn.addEventListener('click', function () {
+        showHome();
+        navReconcile();
       });
 
       window.addEventListener('pagehide', flushSave);
@@ -2616,11 +2744,202 @@
 
       document.addEventListener('keydown', function (e) {
         if (e.key !== 'Escape' || isLoading()) return;
-        if (isModalOpen()) closeModal();
+        if (isForgeOpen()) closeForge();
+        else if (isModalOpen()) closeModal();
         else if (isSidebarOpen()) closeSidebar();
+        else if (uiDepth() === 2) { selectTab('summary'); navReconcile(); }
       });
 
+      /* ====== مسبك الأفكار ====== */
+      var FORGE_GUIDES = {
+        linkedin: {
+          label: 'LinkedIn',
+          guide: 'منشور LinkedIn احترافي: سطر افتتاحي قوي يجذب الانتباه، ثم فقرات قصيرة (سطر أو سطران لكل فقرة) تعرض الفكرة والدروس أو الخطوات العملية، وينتهي بسؤال يفتح النقاش، ثم 3 إلى 5 وسوم مناسبة. لا يتجاوز 1300 حرف.',
+          limit: 1300
+        },
+        x: {
+          label: 'X',
+          guide: 'تغريدة واحدة على منصة X لا تتجاوز 260 حرفاً (بما فيها الوسوم)، قوية ومباشرة وتحمل فكرة واحدة لافتة، مع وسم أو وسمين على الأكثر.',
+          limit: 280
+        },
+        instagram: {
+          label: 'Instagram',
+          guide: 'تعليق (Caption) لإنستغرام: افتتاحية جذابة في السطر الأول، نبرة قريبة ودافئة، أسطر قصيرة، رموز تعبيرية مناسبة بشكل معتدل، دعوة للتفاعل في النهاية، ثم 8 إلى 12 وسماً. لا يتجاوز 2200 حرف.',
+          limit: 2200
+        }
+      };
+      var FORGE_SYSTEM = 'أنت كاتب محتوى محترف يصوغ منشورات لوسائل التواصل بدقة، ولا تخترع معلومات غير واردة في المادة المعطاة.';
+      var forgeAbort = null;
+      var forgePlatform = null;
+
+      function isForgeOpen() { return !forgeModal.classList.contains('hidden'); }
+
+      function resetForgeView() {
+        forgePlatform = null;
+        forgePickBtns.forEach(function (b) { b.setAttribute('aria-pressed', 'false'); });
+        hideEl(forgeResult, 'block');
+        forgeOutput.classList.add('hidden');
+        forgeOutput.textContent = '';
+        hideEl(forgeActions, 'flex');
+        forgeStatus.textContent = '';
+      }
+
+      function openForge() {
+        if (!getCurrent()) return;
+        resetForgeView();
+        showEl(forgeModal, 'flex');
+        document.body.classList.add('overflow-hidden');
+        forgePickBtns[0].focus();
+      }
+
+      function closeForge() {
+        if (forgeAbort) { forgeAbort.abort(); forgeAbort = null; }
+        hideEl(forgeModal, 'flex');
+        if (!isSidebarOpen() && !isModalOpen()) document.body.classList.remove('overflow-hidden');
+      }
+
+      function buildForgePrompt(item, platform) {
+        var cfg = FORGE_GUIDES[platform];
+        return 'مهمتك صياغة منشور جاهز للنشر اعتماداً على المعلومات التالية فقط، دون اختلاق أرقام أو أقوال أو وقائع غير واردة فيها.\n\n' +
+          'العنوان: ' + item.title + '\n' + buildChatContext(item, false) + '\n\n' +
+          'المطلوب: ' + cfg.guide + '\n' +
+          'اكتب بنفس لغة الخلاصة. أعد نص المنشور فقط جاهزاً للنسخ، دون مقدمة أو شرح أو علامات Markdown أو علامات اقتباس.';
+      }
+
+      function updateForgeCount() {
+        var cfg = FORGE_GUIDES[forgePlatform];
+        var n = forgeOutput.textContent.length;
+        forgeCount.textContent = n + ' / ' + cfg.limit + ' حرف';
+        forgeCount.classList.toggle('text-red-500', n > cfg.limit);
+        forgeCount.classList.toggle('text-slate-400', n <= cfg.limit);
+      }
+
+      async function runForge(platform) {
+        var item = getCurrent();
+        if (!item || !FORGE_GUIDES[platform]) return;
+        if (!getKey() && !getGroqKey()) {
+          showToast('يرجى إدخال مفتاح Groq أو Gemini أولاً: افتح الإعدادات (زر الترس)');
+          return;
+        }
+
+        if (forgeAbort) forgeAbort.abort();
+        var ctrl = new AbortController();
+        forgeAbort = ctrl;
+        forgePlatform = platform;
+
+        forgePickBtns.forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-platform') === platform ? 'true' : 'false'); });
+        showEl(forgeResult, 'block');
+        forgeOutput.classList.add('hidden');
+        hideEl(forgeActions, 'flex');
+        forgeStatus.textContent = 'سيزار يصوغ منشورك...';
+
+        try {
+          // الكتابة تحتاج جودة: نموذج Groq الأقوى أولاً ثم Gemini
+          var contents = [{ role: 'user', parts: [{ text: buildForgePrompt(item, platform) }] }];
+          var text = await textWaterfall(contents, ctrl, function (t) { forgeStatus.textContent = t; }, GROQ_QUALITY_MODEL, FORGE_SYSTEM, 0.7);
+          if (ctrl.signal.aborted) return;
+
+          forgeOutput.textContent = text; // textContent: آمن
+          forgeOutput.classList.remove('hidden');
+          showEl(forgeActions, 'flex');
+          forgeStatus.textContent = 'منشور ' + FORGE_GUIDES[platform].label + ' جاهز:';
+          updateForgeCount();
+        } catch (err) {
+          if (ctrl.signal.aborted || (err && err.name === 'AbortError')) return;
+          console.error('Forge error:', err);
+          forgeStatus.textContent = (err && err.userFacing) ? err.message : 'حدث خطأ غير متوقع. حاول مرة أخرى.';
+          forgeOutput.classList.add('hidden');
+          showEl(forgeActions, 'flex');
+          forgeCount.textContent = '';
+        } finally {
+          if (forgeAbort === ctrl) forgeAbort = null;
+        }
+      }
+
+      forgePickBtns.forEach(function (b) {
+        b.addEventListener('click', function () { runForge(b.getAttribute('data-platform')); });
+      });
+      forgeRetryBtn.addEventListener('click', function () { if (forgePlatform) runForge(forgePlatform); });
+      forgeCopyBtn.addEventListener('click', async function () {
+        var text = forgeOutput.textContent;
+        if (!text) { showToast('لا يوجد نص لنسخه'); return; }
+        var ok = await copyToClipboard(text);
+        showToast(ok ? 'تم نسخ المنشور' : 'تعذّر النسخ. جرّب مرة أخرى.');
+      });
+      forgeCloseBtn.addEventListener('click', closeForge);
+      forgeModal.addEventListener('click', function (e) { if (e.target === forgeModal) closeForge(); });
+
+      /* ====== زر الرجوع في الهاتف (Hardware Back) ======
+         الشات ← الخلاصة ← الرئيسية ← الخروج. كل مستوى أعمق يضيف مدخلاً في سجل المتصفح (History API) */
+      var navDepth = 0;          // عمق المدخلات التي أضفناها: 0 الرئيسية، 1 الخلاصة، 2 الشات
+      var navPending = false;    // history.go() قيد التنفيذ
+      var navPendingTimer = null;
+
+      function uiDepth() {
+        if (workspaceView.classList.contains('hidden')) return 0;
+        return panelChat.classList.contains('hidden') ? 1 : 2;
+      }
+
+      // يُزامن سجل المتصفح مع ما تعرضه الشاشة فعلاً
+      function navReconcile() {
+        if (navPending) return;
+        var target = uiDepth();
+        if (navDepth < target) {
+          while (navDepth < target) {
+            navDepth++;
+            try { history.pushState({ caesar: 1, d: navDepth }, ''); } catch (e) {}
+          }
+        } else if (navDepth > target) {
+          navPending = true;
+          clearTimeout(navPendingTimer);
+          navPendingTimer = setTimeout(function () { navPending = false; navDepth = uiDepth(); }, 800);
+          try {
+            history.go(target - navDepth);
+          } catch (e) {
+            navPending = false;
+            navDepth = target;
+          }
+        }
+      }
+
+      // أي نافذة مفتوحة تُغلق أولاً قبل التنقل
+      function closeTopOverlay() {
+        if (isLoading()) { showToast('اضغط «إلغاء» لإيقاف المعالجة'); return true; }
+        if (isForgeOpen()) { closeForge(); return true; }
+        if (isModalOpen()) { closeModal(); return true; }
+        if (isSidebarOpen()) { closeSidebar(); return true; }
+        return false;
+      }
+
+      window.addEventListener('popstate', function (e) {
+        var st = e.state;
+        if (!st || !st.caesar) return;
+        navPending = false;
+        clearTimeout(navPendingTimer);
+        navDepth = st.d;
+
+        if (closeTopOverlay()) { navReconcile(); return; }
+
+        if (st.d < 0 && uiDepth() === 0) {
+          // الرئيسية: الضغطة التالية تخرج من التطبيق
+          try { history.back(); } catch (err) {}
+          return;
+        }
+
+        var target = Math.max(st.d, 0);
+        if (uiDepth() === 2 && target < 2) selectTab('summary');
+        if (uiDepth() === 1 && target < 1) showHome();
+        navReconcile();
+      });
+
+      try {
+        // مدخل أساسي (-1) ثم مدخل الرئيسية (0): الرجوع من الرئيسية يعود للمدخل الأساسي فنخرج
+        history.replaceState({ caesar: 1, d: -1 }, '');
+        history.pushState({ caesar: 1, d: 0 }, '');
+      } catch (e) {}
+
       /* ====== التهيئة ====== */
+      getKey(); getGroqKey(); // ترحيل أي مفتاح قديم محفوظ نصاً إلى الصيغة المرمَّزة
       syncThemeColor();
       updateKeyUI();
       updateChatUI();

@@ -131,13 +131,22 @@
     .rec-live { background: #000; box-shadow: 0 0 0 3px #ef4444, 0 0 38px 6px rgba(239, 68, 68, .5); }
 
     /* ===== واجهة الشات ===== */
-    .chat-shell { background: linear-gradient(180deg, #ffffff 0%, #fff6f1 100%); }
-    .dark .chat-shell { background: #111827; }
-    .chat-glow { position: absolute; width: 16rem; height: 16rem; border-radius: 9999px; filter: blur(72px); pointer-events: none; }
-    .chat-glow-a { top: -6rem; right: -6rem; background: #dc2626; opacity: .13; }
-    .chat-glow-b { bottom: -7rem; left: -6rem; background: #f97316; opacity: .12; }
-    .dark .chat-glow-a { opacity: .20; }
-    .dark .chat-glow-b { opacity: .16; }
+    /* الشات بملء الشاشة (نمط Telegram): سوداء عميقة ليلاً، وفاتحة دافئة نهاراً، مع توهج خفيف جداً */
+    #panel-chat { display: flex; flex-direction: column; margin: 0 !important; }
+    #panel-chat.hidden { display: none; }
+    .chat-screen { background: linear-gradient(180deg, #fffaf6 0%, #fff1e8 100%); color: #1e293b; }
+    .dark .chat-screen { background: #05060a; color: #e2e8f0; }
+    .chat-topbar {
+      background: rgba(255, 255, 255, .86); border-bottom: 1px solid rgba(0, 0, 0, .07);
+      -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+      padding-top: env(safe-area-inset-top);
+    }
+    .dark .chat-topbar { background: rgba(8, 9, 14, .84); border-bottom-color: rgba(255, 255, 255, .08); }
+    .chat-glow { position: absolute; width: 18rem; height: 18rem; border-radius: 9999px; filter: blur(90px); pointer-events: none; }
+    .chat-glow-a { top: -7rem; right: -7rem; background: #dc2626; opacity: .07; }
+    .chat-glow-b { bottom: -8rem; left: -7rem; background: #f97316; opacity: .06; }
+    .dark .chat-glow-a { opacity: .11; }
+    .dark .chat-glow-b { opacity: .09; }
 
     .caesar-avatar {
       width: 40px; height: 40px; flex: none; border-radius: 9999px; overflow: hidden;
@@ -148,10 +157,22 @@
     .caesar-avatar svg { width: 150%; height: 150%; flex: none; }
 
     .bubble-ai {
-      background: #1e293b; color: #e2e8f0;
+      background: #2a2f3a; color: #f1f5f9;
       border: 1px solid rgba(255, 255, 255, .07);
       box-shadow: 0 6px 18px -10px rgba(0, 0, 0, .6);
     }
+    .bubble-user {
+      background: linear-gradient(135deg, #c2410c 0%, #ea580c 55%, #f97316 100%); color: #fff;
+      box-shadow: 0 8px 22px -10px rgba(234, 88, 12, .75);
+    }
+
+    /* مسبك الأفكار */
+    .forge-card {
+      background: linear-gradient(135deg, rgba(220, 38, 38, .10), rgba(249, 115, 22, .16));
+      border: 1px solid rgba(249, 115, 22, .38);
+    }
+    .forge-pick[aria-pressed="true"] { border-color: #f97316; background: rgba(249, 115, 22, .12); color: #ea580c; }
+    .dark .forge-pick[aria-pressed="true"] { color: #fdba74; }
 
     /* شريط الإدخال العائم (زجاجي) */
     .glass-bar {
@@ -393,6 +414,7 @@
             <option value="detailed">مفصل للطلبة</option>
             <option value="meeting">مختصر للاجتماعات</option>
             <option value="bullets">نقاط سريعة</option>
+            <option value="caesar_eye">عين القيصر: التناقضات والوعود</option>
           </select>
           <i class="fa-solid fa-chevron-down absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" aria-hidden="true"></i>
         </div>
@@ -563,43 +585,52 @@
 
       <div id="panel-transcript" data-panel="transcript" role="tabpanel" class="hidden space-y-4"></div>
 
-      <!-- ===== تبويب الشات (تحدث مع سيزار) ===== -->
-      <div id="panel-chat" data-panel="chat" role="tabpanel" class="hidden">
-        <div class="chat-shell relative flex flex-col overflow-hidden rounded-3xl border border-slate-200 dark:border-white/10 shadow-sm">
-          <span class="chat-glow chat-glow-a" aria-hidden="true"></span>
-          <span class="chat-glow chat-glow-b" aria-hidden="true"></span>
+      <!-- ===== الشات (تحدث مع سيزار): شاشة كاملة بنمط Telegram ===== -->
+      <div id="panel-chat" data-panel="chat" role="tabpanel" aria-label="تحدث مع سيزار"
+        class="chat-screen hidden fixed inset-0 z-[55] flex-col overflow-hidden">
+        <span class="chat-glow chat-glow-a" aria-hidden="true"></span>
+        <span class="chat-glow chat-glow-b" aria-hidden="true"></span>
 
-          <!-- رأس الشات -->
-          <div class="relative z-10 flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-200/80 dark:border-white/10">
-            <div class="flex items-center gap-3 min-w-0">
-              <span class="caesar-avatar" aria-hidden="true"><svg viewBox="0 0 64 64"><use href="#bh" /></svg></span>
-              <div class="leading-tight min-w-0">
-                <h3 class="font-extrabold">سيزار</h3>
-                <p class="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 truncate">
-                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" aria-hidden="true"></span>
-                  مساعدك الذكي لهذا التسجيل
-                </p>
-              </div>
-            </div>
-            <button id="chatClearBtn" type="button"
-              class="w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
-              aria-label="مسح المحادثة" title="مسح المحادثة">
-              <i class="fa-regular fa-trash-can text-sm" aria-hidden="true"></i>
+        <!-- الشريط العلوي: رجوع + صورة سيزار + الاسم + حذف المحادثة -->
+        <header class="chat-topbar relative z-10 shrink-0 flex items-center justify-between gap-2 px-2 h-16 box-content">
+          <div class="flex items-center gap-1.5 min-w-0">
+            <button id="chatBackBtn" type="button"
+              class="w-11 h-11 shrink-0 rounded-full flex items-center justify-center text-slate-600 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              aria-label="رجوع إلى الخلاصة" title="رجوع">
+              <i class="fa-solid fa-arrow-right text-lg" aria-hidden="true"></i>
             </button>
+            <span class="caesar-avatar" aria-hidden="true"><svg viewBox="0 0 64 64"><use href="#bh" /></svg></span>
+            <div class="leading-tight min-w-0 ps-1">
+              <h3 class="font-extrabold text-base">سيزار</h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 truncate">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" aria-hidden="true"></span>
+                مساعدك الذكي لهذا التسجيل
+              </p>
+            </div>
           </div>
+          <button id="chatClearBtn" type="button"
+            class="w-11 h-11 shrink-0 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+            aria-label="حذف المحادثة" title="حذف المحادثة">
+            <i class="fa-regular fa-trash-can" aria-hidden="true"></i>
+          </button>
+        </header>
 
-          <!-- منطقة الرسائل -->
-          <div id="chatMessages" role="log" aria-live="polite" aria-label="رسائل المحادثة"
-            class="relative z-10 h-[60vh] min-h-[20rem] max-h-[36rem] overflow-y-auto px-3 sm:px-4 pt-4 pb-24 space-y-4"></div>
+        <!-- منطقة الرسائل -->
+        <div id="chatMessages" role="log" aria-live="polite" aria-label="رسائل المحادثة"
+          class="relative z-10 flex-1 min-h-0 w-full max-w-3xl mx-auto overflow-y-auto overscroll-contain px-3 sm:px-6 pt-4 pb-4 space-y-2.5"></div>
 
-          <!-- شريط الإدخال العائم -->
-          <form id="chatForm" autocomplete="off"
-            class="glass-bar absolute z-20 inset-x-3 bottom-3 flex items-end gap-2 p-2 rounded-[28px]">
+        <!-- شريط الإدخال العائم -->
+        <div class="relative z-20 shrink-0 w-full max-w-3xl mx-auto px-3 pt-1" style="padding-bottom: calc(.75rem + env(safe-area-inset-bottom));">
+          <form id="chatForm" autocomplete="off" class="glass-bar flex items-end gap-1 p-1.5 rounded-[28px]">
+            <button id="chatMicBtn" type="button" aria-label="الإدخال الصوتي (قريباً)" title="قريباً"
+              class="w-11 h-11 shrink-0 rounded-full flex items-center justify-center text-slate-400 hover:text-orange-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
+              <i class="fa-solid fa-microphone" aria-hidden="true"></i>
+            </button>
             <label for="chatInput" class="sr-only">اكتب سؤالك</label>
             <textarea id="chatInput" rows="1" maxlength="1000" dir="auto" placeholder="اسأل سيزار عن هذا التسجيل..."
-              class="flex-1 min-w-0 resize-none bg-transparent text-slate-800 dark:text-slate-100 placeholder-slate-400 px-3 py-2 text-base leading-6 max-h-32 focus:outline-none"></textarea>
+              class="flex-1 min-w-0 resize-none bg-transparent text-slate-800 dark:text-slate-100 placeholder-slate-400 px-2 py-2.5 text-base leading-6 max-h-32 focus:outline-none"></textarea>
             <button id="chatSendBtn" type="submit" aria-label="إرسال"
-              class="w-10 h-10 shrink-0 rounded-full bg-caesar glow-caesar text-white flex items-center justify-center transition active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:opacity-50 disabled:cursor-not-allowed">
+              class="w-11 h-11 shrink-0 rounded-full bg-caesar glow-caesar text-white flex items-center justify-center transition active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:opacity-50 disabled:cursor-not-allowed">
               <i class="fa-solid fa-arrow-up" aria-hidden="true"></i>
             </button>
           </form>
@@ -693,9 +724,15 @@
           </button>
         </div>
 
-        <p class="text-xs text-slate-400 dark:text-slate-500 leading-relaxed">
-          يُحفظ المفتاح على هذا الجهاز فقط داخل المتصفح، ويُرسل إلى خوادم Groq أولاً، وإلى خوادم Google عند الاحتياط، وقت التلخيص والمحادثة فقط.
-        </p>
+        <div class="flex gap-2.5 rounded-xl border border-amber-300/70 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-400/30 p-3 text-xs leading-relaxed text-amber-900 dark:text-amber-200" role="note">
+          <i class="fa-solid fa-shield-halved mt-0.5 shrink-0" aria-hidden="true"></i>
+          <p>
+            <strong>تنبيه أمني:</strong> تُحفظ مفاتيحك على هذا الجهاز فقط، بعد ترميزها بـ Base64 كي لا تظهر نصاً صريحاً في التخزين.
+            وهذا ترميز لا تشفير قوي: من يملك وصولاً إلى جهازك أو إلى أدوات المطوّر يستطيع فكّه.
+            لا تُدخل مفاتيحك على جهاز مشترك، وبدّلها فوراً إن شككت بتسريبها.
+            تُرسل المفاتيح إلى خوادم Groq أولاً، ثم إلى خوادم Google عند الاحتياط، وقت التلخيص والمحادثة فقط.
+          </p>
+        </div>
       </form>
     </div>
   </div>
@@ -711,7 +748,7 @@
         <span class="absolute inset-0 rounded-full border-[3px] border-orange-500/20 border-t-orange-500 animate-spin"></span>
         <svg class="absolute inset-2 w-24 h-24 bh-pulse" viewBox="0 0 64 64"><use href="#bh" /></svg>
       </div>
-      <p id="loadingText" class="font-bold text-lg min-h-[3.5rem] flex items-center justify-center">جاري تجهيز الصوت...</p>
+      <p id="loadingText" class="font-bold text-lg min-h-[3.5rem] flex items-center justify-center">سيزار يفك شيفرة حديثك...</p>
 
       <div class="flex gap-1.5 w-full" aria-hidden="true">
         <span data-seg class="flex-1 h-1.5 rounded-full transition-colors duration-500 bg-white"></span>
@@ -747,6 +784,62 @@
     </div>
   </div>
 
+  <!-- ========== نافذة مسبك الأفكار ========== -->
+  <div id="forgeModal" class="fixed inset-0 z-[60] hidden items-center justify-center p-4 bg-black/60"
+    role="dialog" aria-modal="true" aria-labelledby="forgeTitle">
+    <div class="w-full max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700">
+      <div class="flex items-center justify-between px-5 h-16 border-b border-slate-200 dark:border-slate-700">
+        <h2 id="forgeTitle" class="font-bold text-lg flex items-center gap-2">
+          <i class="fa-solid fa-fire-flame-curved text-brand dark:text-brand-400" aria-hidden="true"></i>
+          مسبك الأفكار
+        </h2>
+        <button id="forgeCloseBtn" type="button"
+          class="w-10 h-10 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          aria-label="إغلاق">
+          <i class="fa-solid fa-xmark text-lg" aria-hidden="true"></i>
+        </button>
+      </div>
+
+      <div class="p-5 space-y-4">
+        <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">اختر المنصة، وسيصوغ سيزار هذه الخلاصة كمنشور جاهز للنشر.</p>
+
+        <div class="grid grid-cols-3 gap-2" role="group" aria-label="اختر المنصة">
+          <button type="button" data-platform="linkedin" aria-pressed="false"
+            class="forge-pick flex flex-col items-center gap-1.5 rounded-xl border-2 border-slate-200 dark:border-slate-600 py-3 text-sm font-bold transition hover:border-orange-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
+            <i class="fa-brands fa-linkedin text-2xl" aria-hidden="true"></i><span>LinkedIn</span>
+          </button>
+          <button type="button" data-platform="x" aria-pressed="false"
+            class="forge-pick flex flex-col items-center gap-1.5 rounded-xl border-2 border-slate-200 dark:border-slate-600 py-3 text-sm font-bold transition hover:border-orange-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
+            <i class="fa-brands fa-x-twitter text-2xl" aria-hidden="true"></i><span>X</span>
+          </button>
+          <button type="button" data-platform="instagram" aria-pressed="false"
+            class="forge-pick flex flex-col items-center gap-1.5 rounded-xl border-2 border-slate-200 dark:border-slate-600 py-3 text-sm font-bold transition hover:border-orange-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
+            <i class="fa-brands fa-instagram text-2xl" aria-hidden="true"></i><span>Instagram</span>
+          </button>
+        </div>
+
+        <div id="forgeResult" class="hidden space-y-3">
+          <p id="forgeStatus" class="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2" role="status" aria-live="polite"></p>
+          <div id="forgeOutput" dir="auto"
+            class="hidden rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-4 text-[15px] leading-loose whitespace-pre-wrap break-words max-h-72 overflow-y-auto"></div>
+          <div id="forgeActions" class="hidden items-center justify-between gap-2">
+            <span id="forgeCount" dir="auto" class="text-xs text-slate-400 tabular-nums"></span>
+            <div class="flex gap-2">
+              <button id="forgeRetryBtn" type="button"
+                class="px-3 py-2 rounded-xl text-sm font-bold bg-brand-50 text-brand hover:bg-brand-100 dark:bg-slate-700 dark:text-brand-400 dark:hover:bg-slate-600 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+                <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> إعادة الصياغة
+              </button>
+              <button id="forgeCopyBtn" type="button"
+                class="px-4 py-2 rounded-xl text-sm font-bold bg-caesar glow-caesar text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
+                <i class="fa-regular fa-copy" aria-hidden="true"></i> نسخ
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ========== التوست ========== -->
   <div id="toast" role="status" aria-live="polite"
     class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[90] max-w-[90%] px-5 py-3 rounded-xl bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-sm font-semibold shadow-lg opacity-0 pointer-events-none translate-y-4 transition-all duration-300 text-center whitespace-pre-line break-words">
@@ -755,6 +848,6 @@
   <!-- ========== منطقة الطباعة (مخفية على الشاشة، تظهر عند تصدير PDF) ========== -->
   <div id="printArea" class="hidden" dir="rtl" aria-hidden="true"></div>
 
-  <script src="app.js?v=20"></script>
+  <script src="app.js?v=30"></script>
 </body>
 </html>
